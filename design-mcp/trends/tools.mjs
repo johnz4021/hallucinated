@@ -1,8 +1,8 @@
 // trends(query, platforms): what people are saying about a topic right now, as compact text for Product's design briefs.
 // Never for Growth posts (X rules: no automatic posts about trending topics).
 //   reddit / threads / tiktok -> Naïve socialData (paid per call, ~$0.001-0.002); each tool's price is checked before
-//                                every call (refused over $0.01, or if it isn't priced per call) and a daily cap applies
-//                                (TRENDS_DAILY_BUDGET_USD, default 0.50; ledger in <root>/trends-spend.json)
+//                                every call (refused over $0.01, or if it isn't priced per call). No daily cap (John's call,
+//                                Sat evening); spend is still logged per day in <root>/trends-spend.json
 //   hn                        -> Hacker News' free Algolia search API
 //   x                         -> our own X API keys (x_search); Naïve's X data tools 404
 import path from "node:path";
@@ -51,7 +51,6 @@ export function registerTrendsTools(server, ctx) {
   const env = fs.existsSync(path.join(ctx.rootDir, ".env")) ? fs.readFileSync(path.join(ctx.rootDir, ".env"), "utf8") : "";
   const xk = xKeys(env);
   const spendFile = path.join(ctx.rootDir, "trends-spend.json");
-  const cap = () => Math.round(Number(process.env.TRENDS_DAILY_BUDGET_USD || 0.5) * 1e6);
 
   async function runSocial(p, query) {
     const spec = SD[p];
@@ -66,7 +65,6 @@ export function registerTrendsTools(server, ctx) {
     if (d.price?.basis !== "per_call" || !(d.price.micro_usd <= MAX_CALL_MICRO)) throw new Error(`refused: ${spec.name} costs ${d.price?.text} (limit $0.01 per call)`);
     const led = readJson(spendFile, {});
     const spent = led[today()]?.micro_usd || 0;
-    if (spent + d.price.micro_usd > cap()) throw new Error(`refused: daily trends budget used ($${(spent / 1e6).toFixed(3)} of $${(cap() / 1e6).toFixed(2)})`);
     led[today()] = { micro_usd: spent + d.price.micro_usd, calls: (led[today()]?.calls || 0) + 1 };
     writeJson(spendFile, led);   // count it before the call: a timed-out run may still be billed
     const r = await v.socialData.run({ tool_id: id, ...spec.args(query) });
@@ -95,7 +93,7 @@ export function registerTrendsTools(server, ctx) {
 
   server.registerTool("trends", {
     title: "What people are saying about a topic (for design briefs)",
-    description: "Searches recent posts about `query` on the chosen platforms and returns the most popular ones as compact text (text, score, link). For Product's design research only. reddit/threads/tiktok cost about $0.001-0.002 per platform per call (daily cap applies); hn and x are free. Default platforms: hn, reddit.",
+    description: "Searches recent posts about `query` on the chosen platforms and returns the most popular ones as compact text (text, score, link). For Product's design research only. reddit/threads/tiktok cost about $0.001-0.002 per platform per call; hn and x are free. Default platforms: hn, reddit.",
     inputSchema: {
       query: z.string().min(2).max(120),
       platforms: z.array(z.enum(["reddit", "threads", "tiktok", "hn", "x"])).min(1).max(5).optional(),
@@ -109,7 +107,7 @@ export function registerTrendsTools(server, ctx) {
     }));
     const cost = Object.values(res).reduce((a, r) => a + (r.cost_usd || 0), 0);
     ctx.log?.(`[trends] "${query}" ${platforms.join(",")} cost $${cost.toFixed(3)}: ${Object.entries(res).map(([p, r]) => `${p}=${r.error ? "ERR " + r.error : r.posts.length}`).join(" ")}`);
-    const lines = [`trends for "${query}" (cost $${cost.toFixed(3)}; today's spend $${((readJson(spendFile, {})[today()]?.micro_usd || 0) / 1e6).toFixed(3)} of $${(cap() / 1e6).toFixed(2)})`];
+    const lines = [`trends for "${query}" (cost $${cost.toFixed(3)}; today's trends spend $${((readJson(spendFile, {})[today()]?.micro_usd || 0) / 1e6).toFixed(3)})`];
     for (const p of platforms) {
       const r = res[p];
       lines.push(`\n## ${p}${r?.error ? ": " + r.error : ""}`);

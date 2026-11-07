@@ -139,7 +139,7 @@ export function registerPreorderTools(server, ctx) {
   server.registerTool("charge_preorders", {
     title: "Charge saved cards for a launched product (moves customers' money; John approves)",
     description: "At launch: charges every open, uncharged pre-order of product_id off-session on its saved card, one PaymentIntent per pre-order (idempotent: a re-run never double-charges). Refused if the total would exceed max_total_usd. Cards that need the customer (3DS) or decline get a Stripe-hosted invoice link instead (no retries), and John is flagged; Support emails those links with preorder_send_payment_link. Returns results, or a job_id to poll with charge_preorders_status if it's still running.",
-    inputSchema: { product_id: z.string().startsWith("prod_"), max_total_usd: z.number().positive().max(5000) },
+    inputSchema: { product_id: z.string().regex(/^prod_[A-Za-z0-9]+$/), max_total_usd: z.number().positive().max(5000) },
   }, async ({ product_id, max_total_usd }) => {
     try {
       need();
@@ -182,7 +182,7 @@ export function registerPreorderTools(server, ctx) {
   server.registerTool("preorder_cancel", {
     title: "Cancel a pre-order (no money moves)",
     description: "For a customer who asks to cancel their pre-order by email: removes their saved card from Stripe and marks the pre-order cancelled. requester_email must be the pre-order's email (the address the cancellation came from). Refused if anything on it was already charged: that's a refund, so flag_john. Then confirm to the customer with inbox_reply.",
-    inputSchema: { preorder_session: z.string().startsWith("cs_"), requester_email: z.string(), reason: z.string().max(300).optional() },
+    inputSchema: { preorder_session: z.string().regex(/^cs_[A-Za-z0-9_]+$/), requester_email: z.string(), reason: z.string().max(300).optional() },
   }, async ({ preorder_session, requester_email, reason }) => {
     try {
       const p = (await listPreorders(need(), { includeCancelled: true })).find((x) => x.preorder_session === preorder_session);

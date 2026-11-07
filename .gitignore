@@ -51,6 +51,7 @@ customania_upload_test.py
 flags.jsonl
 order-events.jsonl
 courier-requests.json
+courier-scheduled.json
 x-ledger.json
 x-ledger.dry.json
 stripe-batched.json
@@ -59,5 +60,6 @@ trends-spend.json
 inbox-ledger.json
 stripe-flagged.json
 preorders-ledger.json
+design-proposals.json
 *.tmp
 scout-queue.json

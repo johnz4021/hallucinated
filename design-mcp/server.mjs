@@ -11,6 +11,7 @@ import { registerAgentMailTools } from "./agentmail/tools.mjs";
 import { registerStripeTools } from "./stripe/tools.mjs";
 import { registerTrendsTools } from "./trends/tools.mjs";
 import { registerPreorderTools } from "./stripe/preorders.mjs";
+import { registerDesignTools } from "./designs/tools.mjs";
 
 export function buildMcp(ctx) {
   const server = new McpServer({ name: "hallucinated", version: "0.1.0" });
@@ -41,6 +42,7 @@ export function buildMcp(ctx) {
   if (ctx.rootDir) registerStripeTools(server, ctx);
   if (ctx.rootDir) registerTrendsTools(server, ctx);
   if (ctx.rootDir) registerPreorderTools(server, ctx);
+  if (ctx.rootDir) registerDesignTools(server, ctx);
   return server;
 }
 

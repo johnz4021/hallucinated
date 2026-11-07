@@ -8,12 +8,29 @@ import { createClient } from "@usenaive-sdk/vetta";
 import { xKeys, xMe, xUpload, xTweet, xDelete, prepVideo, xSearch, xMentions, xGetTweet, engagedWithUs } from "./xapi.mjs";
 import { readJson, writeJson } from "../lib/state.mjs";
 import { adsEnv, AdsToken, adsCall } from "./ads.mjs";
+import { stripeClient } from "../stripe/tools.mjs";
+import { announceCheck, markAnnounced, newDesigns } from "../designs/tools.mjs";
+import { PILLARS, LINK_WINDOW, nextPillar, linkAllowed, hasStoreLink, agentsLogEvents, pickSpotlight } from "../growth/pillars.mjs";
+import { loadProposals } from "../designs/ledger.mjs";
 
 const txt = (o) => ({ content: [{ type: "text", text: JSON.stringify(o, null, 2) }] });
 const err = (m) => ({ isError: true, content: [{ type: "text", text: m }] });
 
-// media: a Naïve file id (fil_…), one of our design ids, or a file name in our designs folder
+// Image URLs we accept as media: our store (mockups) and our Vercel Blob store (prints, lookbook). Nothing else.
+export const ownImageUrl = (u) => { try { const x = new URL(u); return x.protocol === "https:" && (x.host === "hallucinated-store.vercel.app" || /\.public\.blob\.vercel-storage\.com$/.test(x.host)); } catch { return false; } };
+
+// media: a Naïve file id (fil_…), one of our design ids, a file name in our designs folder, or an https image URL on our store/Blob
 async function resolveMedia(ctx, media) {
+  if (/^https:\/\//.test(media)) {
+    if (!ownImageUrl(media)) throw new Error(`media URL must be on hallucinated-store.vercel.app or our Vercel Blob store: ${media}`);
+    const r = await fetch(media, { signal: AbortSignal.timeout(30_000) });
+    const type = (r.headers.get("content-type") || "").split(";")[0];
+    if (!r.ok || !/^image\/(png|jpeg|webp|gif)$/.test(type)) throw new Error(`media URL gave ${r.status} ${type || "no content-type"}`);
+    const bytes = Buffer.from(await r.arrayBuffer());
+    const f = path.join(os.tmpdir(), `xmedia-${Date.now()}.${type.split("/")[1].replace("jpeg", "jpg")}`);
+    fs.writeFileSync(f, bytes);
+    return f;
+  }
   if (/^fil_/.test(media)) {
     const v = createClient({ baseUrl: "https://api.vetta.sh", apiKey: ctx.vettaKey });
     const bytes = Buffer.from(await v.files.downloadBytes(media));
@@ -76,7 +93,7 @@ const ledgerFile = (ctx) => path.join(ctx.rootDir, DRY() ? "x-ledger.dry.json" :
 const loadLedger = (ctx) => readJson(ledgerFile(ctx), { replied_authors: {}, scouted_authors: {}, posts: [] });
 const saveLedger = (ctx, l) => writeJson(ledgerFile(ctx), l);
 const since = (l, kind, ms) => l.posts.filter((p) => p.kind === kind && Date.now() - new Date(p.at).getTime() < ms);
-const MAX_POSTS_DAY = () => Number(process.env.X_MAX_POSTS_PER_DAY || 6);
+const MAX_POSTS_DAY = () => Number(process.env.X_MAX_POSTS_PER_DAY || 12);   // Growth runs every 1.5 h, 08:20-23:20 (11 slots)
 const MIN_GAP_MIN = () => Number(process.env.X_MIN_GAP_MIN || 45);
 const MAX_REPLIES_DAY = () => Number(process.env.X_MAX_REPLIES_PER_DAY || 40);
 const MAX_SCOUT_DAY = () => Number(process.env.X_MAX_SCOUT_PER_DAY || 10);
@@ -109,8 +126,11 @@ export function registerXTools(server, ctx) {
     let media_ids;
     if (DRY()) {
       const id = `dry-${Date.now()}`;
-      ctx.log?.(`[${kind} DRY RUN] would post${reply_to ? " reply to " + reply_to : ""}${quote ? " quoting " + quote : ""}${media ? " with media " + media : ""}: ${JSON.stringify(text)}`);
-      return { id, url: `https://x.com/i/status/${id}`, text, dry_run: true };
+      // still fetch the media in a dry run, so a broken image URL shows up in testing (it's just not uploaded)
+      let mediaCheck = null;
+      if (media) { const f = await resolveMedia(ctx, media); mediaCheck = `${path.basename(f)} ${fs.statSync(f).size} bytes`; }
+      ctx.log?.(`[${kind} DRY RUN] would post${reply_to ? " reply to " + reply_to : ""}${quote ? " quoting " + quote : ""}${media ? ` with media ${media} (${mediaCheck})` : ""}: ${JSON.stringify(text)}`);
+      return { id, url: `https://x.com/i/status/${id}`, text, dry_run: true, ...(mediaCheck ? { media_checked: mediaCheck } : {}) };
     }
     if (media) {
       let f = await resolveMedia(ctx, media);
@@ -126,11 +146,25 @@ export function registerXTools(server, ctx) {
 
   server.registerTool("x_post", {
     title: "Post to X as @hallucinateddpt (original posts)",
-    description: "Publishes an ORIGINAL post on the brand's X account (public and immediate). Optional media: a Naïve file id (fil_…) or a design id (posts its black-tee preview). reply_to / quote only for threading under or quoting OUR OWN posts; replies to other people go through x_reply (people who engaged with us) or x_post_scout (everyone else, needs John's OK). Limits enforced here: at most X_MAX_POSTS_PER_DAY originals a day (default 6), at least X_MIN_GAP_MIN minutes apart (default 45), no exact repeats.",
-    inputSchema: { text: z.string().min(1).max(280), media: z.string().optional(), reply_to: z.string().optional(), quote: z.string().optional() },
-  }, async ({ text, media, reply_to, quote }) => {
+    description: "Publishes an ORIGINAL post on the brand's X account (public and immediate). Optional media: an image URL on our store or Blob (e.g. a product mockup), a Naïve file id (fil_…) or a design id (posts its black-tee preview). pillar: the one growth_next_pillar gave you for this run. reply_to / quote only for threading under or quoting OUR OWN posts; replies to other people go through x_reply (people who engaged with us) or x_post_scout (everyone else, queued for John). Limits enforced here: at most X_MAX_POSTS_PER_DAY originals a day (default 12), at least X_MIN_GAP_MIN minutes apart (default 45), no exact repeats, and the store link in at most 1 of every 3 posts (new-design announcements exempt).",
+    inputSchema: { text: z.string().min(1).max(280), media: z.string().optional(), reply_to: z.string().optional(), quote: z.string().optional(),
+      pillar: z.enum(PILLARS).optional().describe("this run's content pillar, exactly as growth_next_pillar returned it"),
+      announce_slug: z.string().optional().describe("when this post announces a new design from store_new_designs: its slug (each design is announced once; the text must include its product URL)") },
+  }, async ({ text, media, reply_to, quote, pillar, announce_slug }) => {
     try {
+      let ann = null;
+      if (announce_slug) {
+        ann = announceCheck(ctx.rootDir, stripeClient(ctx.rootDir).mode, announce_slug, text);
+        if (!ann.ok) return err(`refused: ${ann.why}`);
+      }
       const l = loadLedger(ctx);
+      const g = l.growth || {};
+      // the rotation is decided in code: an original post must use the pillar growth_next_pillar issued for this run
+      if (!reply_to && g.pending?.pillar && Date.now() - new Date(g.pending.at).getTime() < 3 * 3600_000 && pillar !== g.pending.pillar)
+        return err(`refused: this run's pillar is ${g.pending.pillar} (from growth_next_pillar), not ${pillar || "unspecified"}; pass pillar "${g.pending.pillar}"`);
+      if (pillar === "new_design" && !announce_slug) return err("refused: a new_design post needs announce_slug (from growth_next_pillar)");
+      const link = hasStoreLink(text, storeInfo(ctx.rootDir).url);
+      if (!reply_to && link && !linkAllowed(l, pillar)) return err(`refused: the store link is in at most 1 of every ${LINK_WINDOW} posts and one of the last ${LINK_WINDOW - 1} had it; post this without the link`);
       for (const id of [reply_to, quote].filter(Boolean)) {
         if (DRY() && /^dry-/.test(id)) continue;
         const t = await xGetTweet(keys, id);
@@ -142,10 +176,75 @@ export function registerXTools(server, ctx) {
       if (!reply_to && last && Date.now() - new Date(last.at).getTime() < MIN_GAP_MIN() * 60_000) return err(`refused: last original post was ${Math.round((Date.now() - new Date(last.at).getTime()) / 60_000)} min ago (minimum gap ${MIN_GAP_MIN()} min)`);
       if (l.posts.some((p) => p.text === text)) return err("refused: we already posted exactly this text");
       const r = await publish({ text, media, reply_to, quote, kind: "x_post" });
-      l.posts.push({ kind: "post", id: r.id, at: new Date().toISOString(), text, thread: !!reply_to });
+      const at = new Date().toISOString();
+      l.posts.push({ kind: "post", id: r.id, at, text, thread: !!reply_to, has_link: link, ...(pillar ? { pillar } : {}), ...(media ? { media } : {}), ...(announce_slug ? { announces: announce_slug } : {}) });
+      if (!reply_to && pillar) {
+        l.growth = { ...g, pending: null, last_pillar: pillar, ...(pillar !== "new_design" ? { last_rotation: pillar } : {}),
+          ...(pillar === "agents_log" ? { last_agents_log_at: at } : {}),
+          ...(pillar === "spotlight" && g.pending?.spotlight_slug ? { spotlight_history: { ...(g.spotlight_history || {}), [g.pending.spotlight_slug]: at } } : {}) };
+      }
       saveLedger(ctx, l);
-      return txt({ ...r, media: media || null });
+      if (ann) markAnnounced(ctx.rootDir, ann.proposal_id, r.id);
+      return txt({ ...r, media: media || null, ...(announce_slug ? { announced: announce_slug } : {}) });
     } catch (e) { return err(`x_post failed: ${e.message}`); }
+  });
+
+  // ---- content rotation (growth/pillars.mjs decides; state in this ledger) ----------------------------------------
+  const sinceAgentsLog = (g) => g.last_agents_log_at || new Date(Date.now() - 24 * 3600_000).toISOString();
+  async function spotlightCatalog() {
+    const sc = stripeClient(ctx.rootDir);
+    if (sc.error) return [];
+    const s = readJson(path.join(ctx.rootDir, "store.json"), {});
+    const base = (s.url || "https://hallucinated-store.vercel.app").replace(/\/$/, "");
+    const listed = (sc.mode === "live" ? s.products : s.test?.products) || [];
+    const designs = Object.values(loadProposals(ctx.rootDir).proposals).filter((p) => p.state === "published" && p.mode === sc.mode).map((p) => ({ slug: p.slug, product_id: p.publish.product_id }));
+    const out = [];
+    for (const it of [...listed, ...designs]) {
+      if (!it.product_id || out.some((o) => o.slug === it.slug)) continue;
+      const prod = ctx._prodCache?.[it.product_id] || await sc.call("GET", `/products/${it.product_id}`).catch(() => null);
+      (ctx._prodCache ||= {})[it.product_id] = prod;
+      if (!prod?.active || !["live", "preorder"].includes(prod.metadata?.status)) continue;
+      out.push({ slug: it.slug, name: prod.name, description: prod.description, status: prod.metadata.status === "live" ? "in stock" : "pre-order", url: `${base}/p/${it.slug}`,
+        image: (prod.images || []).find(ownImageUrl) || null, by_agents: prod.metadata?.origin === "agents" });
+    }
+    return out;
+  }
+
+  server.registerTool("growth_next_pillar", {
+    title: "This run's content pillar (call before the original post)",
+    description: "Decides, in code, what this run's ONE original post is about: new_design (an unannounced agent design: always first), else the rotation agents_log -> spotlight -> reply_bait -> joke, skipping pillars with nothing to say. Returns the pillar, the material to use (design, design-loop events, or a product with its image), whether this post may carry the store link (at most 1 in 3; announcements exempt), and recent post texts so you don't repeat yourself. Pass the pillar to x_post.",
+    inputSchema: {},
+  }, async () => {
+    try {
+      const sc = stripeClient(ctx.rootDir);
+      const l = loadLedger(ctx), g = l.growth || {};
+      const fresh = newDesigns(ctx.rootDir, sc.mode);
+      const events = agentsLogEvents(loadProposals(ctx.rootDir).proposals, sc.mode, sinceAgentsLog(g));
+      const catalog = await spotlightCatalog();
+      const pillar = nextPillar({ lastRotation: g.last_rotation, hasNewDesign: fresh.length > 0, agentsLogNew: events.length > 0, spotlightAvailable: catalog.length > 0 });
+      const spot = pillar === "spotlight" ? pickSpotlight(catalog, g.spotlight_history, (l.posts || []).filter((p) => p.kind === "post" && !p.thread).slice(-6)) : null;
+      const material = pillar === "new_design" ? { design: fresh[0], media: fresh[0].image, announce_slug: fresh[0].slug }
+        : pillar === "agents_log" ? { events, note: "Describe only what these events say happened (proposals, the CEO's decisions and reasons, publishes). Never invent a decision or a quote." }
+        : pillar === "spotlight" ? { product: spot, media: spot?.image }
+        : pillar === "reply_bait" ? { note: "A prompt that invites replies (people who reply get our one automated reply)." }
+        : { note: "An original brand-voice joke about SF tech life in general. Never about a specific news item, trend, real person or company." };
+      l.growth = { ...g, pending: { pillar, at: new Date().toISOString(), ...(spot ? { spotlight_slug: spot.slug } : {}) } };
+      saveLedger(ctx, l);
+      const recent = (l.posts || []).filter((p) => p.kind === "post").slice(-8).map((p) => ({ pillar: p.pillar || null, text: p.text }));
+      ctx.log?.(`[growth_next_pillar] ${pillar} (last rotation ${g.last_rotation || "none"}, link ${linkAllowed(l, pillar) ? "allowed" : "not allowed"})`);
+      return txt({ pillar, link_allowed: linkAllowed(l, pillar), store_url: storeInfo(ctx.rootDir).url || null, material, recent_posts: recent });
+    } catch (e) { return err(`growth_next_pillar failed: ${e.message}`); }
+  });
+
+  server.registerTool("agents_log", {
+    title: "What the agents did in the design loop (read-only)",
+    description: "Recent events from the design loop: proposals by the Product agent, the CEO agent's approvals and rejections WITH their reasons, guardrail blocks, and publishes. Default: since the last agents_log post. Describe only what's here; never invent decisions.",
+    inputSchema: { since: z.string().optional().describe("ISO time; default = the last agents_log post") },
+  }, async ({ since }) => {
+    const sc = stripeClient(ctx.rootDir);
+    const g = loadLedger(ctx).growth || {};
+    const events = agentsLogEvents(loadProposals(ctx.rootDir).proposals, sc.mode, since || sinceAgentsLog(g));
+    return txt({ mode: sc.mode, since: since || sinceAgentsLog(g), count: events.length, events });
   });
 
   server.registerTool("x_mentions", {

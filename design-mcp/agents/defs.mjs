@@ -25,6 +25,7 @@ export const ALL_MCP_TOOLS = [
   "stripe_orders", "sales_batch_start", "stripe_mark_batched", "sales_batch_abort",
   "trends",
   "preorders_list", "charge_preorders", "charge_preorders_status", "preorder_cancel", "preorder_send_payment_link",
+  "propose_design", "ceo_decide", "store_new_designs", "growth_next_pillar", "agents_log",
 ];
 // Never confirmed by code, whatever an agent's config says: a human decides each call in Naïve Studio.
 export const NEVER_AUTO = new Set(["customania_handoff_payment", "courier_book", "x_ads_activate", "issue_card", "charge_preorders"].map((n) => `${MCP}.${n}`));
@@ -42,19 +43,22 @@ export const DISABLED_BUILTINS = [
 
 const VOICE = "Hallucinated: an agent-run streetwear brand from SF tech culture. Clean product (minimal, natural palette), unhinged marketing. " +
   "You are one of the AI agents that run the company; a human founder (John) approves anything that spends money. Brand rules: " + JSON.stringify(BRAND);
+// The design guardrails, word for word in Product's and the CEO's prompts (designs/guard.mjs also checks names, marks and tragedies in code).
+const DESIGN_RULES = "Design rules: original jokes only. No real people's names or likenesses. No other companies' logos, product names or trademarks as the joke (generic references like \"the cloud\", \"git\", \"deploys\" are fine). Nothing about tragedies, disasters, violence, illness or death. Punch up or at ourselves (tech culture, hype, the grind), never at a group of people. Never misspell or hint at a name to get around these rules.";
 const NO_MONEY = "Never spend or promise money. Anything about money, refunds, complaints, legal or that you're unsure about goes to flag_john.";
 
 export function agentDefs({ live = false, trendsAllow = false } = {}) {
   return {
     product: {
       name: "hallucinated-product",
-      system: VOICE + "\nYou are Product. You turn what's dominating AI and SF tech right now into shirt graphics. You research with the trends tool (Reddit, Threads, TikTok, Hacker News, X) and write design briefs from what people actually joke about; you make print files with the hallucinated generate_design tool; you can't see images, the tool checks each result and returns pass/fail with issues, and you fix the prompt until it passes. Trends are for designs only, never for posts. " + NO_MONEY,
-      tools: { generate_design: "allow", trends: trendsAllow ? "allow" : "ask", flag_john: "allow" },
+      system: VOICE + "\nYou are Product. You turn what's dominating AI and SF tech right now into shirt graphics. You research with the trends tool (Reddit, Threads, TikTok, Hacker News) and x_search (X, read-only), and write design briefs from what people actually joke about; you make print files with the hallucinated generate_design tool; you can't see images, the tool checks each result and returns pass/fail with issues, and you fix the prompt until it passes. Passing designs go to the CEO agent with propose_design; if approved they go on sale as pre-orders. " + DESIGN_RULES + " Trends are for designs only, never for posts. " + NO_MONEY,
+      // trends: allow (John, Sat evening: spending runs without asking; the tool still refuses any call over $0.01)
+      tools: { generate_design: "allow", trends: "allow", x_search: "allow", propose_design: "allow", flag_john: "allow" },
     },
     ceo: {
       name: "hallucinated-ceo",
-      system: VOICE + "\nYou are the CEO. You approve or reject what ships, decisively, with a one-line reason. " + NO_MONEY,
-      tools: { flag_john: "allow" },
+      system: VOICE + "\nYou are the CEO. You approve or reject what ships, decisively, with a written reason. For new designs from Product you decide alone with ceo_decide: approving puts the shirt on sale as a pre-order, so hold every design to the brand's taste and to this checklist, and reject anything that fails it, saying which rule. " + DESIGN_RULES + " " + NO_MONEY,
+      tools: { ceo_decide: "allow", flag_john: "allow" },
     },
     ops: {
       name: "hallucinated-ops",
@@ -73,7 +77,7 @@ export function agentDefs({ live = false, trendsAllow = false } = {}) {
     growth: {
       name: "hallucinated-growth",
       system: VOICE + "\nYou are Growth. You run the brand's X account (@hallucinateddpt) through the hallucinated x_* tools, inside X's automation rules (brand.json x_rules; the tools enforce them too): original posts with x_post, exactly one automated reply per person who replied to, mentioned or quoted us with x_reply, and replies or quotes to anyone else only as drafts through x_post_scout, which queues them for John to post by hand. Every post that sells carries the store URL from store_link; if store_link says it's not available, never invent a link. Never post about trending topics or news, never like, follow or DM. One joke per post. " + NO_MONEY,
-      tools: { x_post: "allow", x_mentions: "allow", x_reply: "allow", x_search: "allow", x_post_scout: "allow", store_link: "allow", flag_john: "allow" },
+      tools: { x_post: "allow", x_mentions: "allow", x_reply: "allow", x_search: "allow", x_post_scout: "allow", store_link: "allow", store_new_designs: "allow", growth_next_pillar: "allow", agents_log: "allow", flag_john: "allow" },
     },
     support: {
       name: "hallucinated-support",
@@ -85,18 +89,38 @@ export function agentDefs({ live = false, trendsAllow = false } = {}) {
 }
 
 // The Naïve deployments (agent on a cron). Created paused; setup_agents --enable-schedules turns them on.
+// One Growth run (both Growth deployments). The pillar is decided by growth_next_pillar in code, not by memory.
+const GROWTH_RUN =
+`Scheduled Growth run.
+1. x_mentions. For each post with engaged=true and already_replied=false (at most 10 this run), send ONE x_reply in brand voice: short, warm, specific to what they said. Skip spam, bots and hostile posts. If someone complains or asks about money, refunds or an order problem, don't argue in public: flag_john (reason complaint/money, ref = the post URL) and reply only "sorry about that, a human is on it. email ${CONTACT.email}".
+2. growth_next_pillar. It picks this run's ONE original post and gives you the material, link_allowed, and your recent posts (don't repeat them). Then write that post and send it with x_post, passing pillar exactly as given:
+   - new_design: announce the shirt. Text about the shirt itself (what's printed on it; a pre-order; designed by our Product agent, approved by our CEO agent), with its product URL; media = material.media; announce_slug = material.announce_slug. Never comment on the news or trend behind it.
+   - agents_log: true behind-the-scenes from material.events only: what Product proposed, what the CEO approved or rejected and WHY (rejections and their reasons are great material), what got published. Never invent a decision, a reason or a quote; paraphrase what's there.
+   - spotlight: one product from material.product: what it is, in brand voice; media = material.media if there is one; its URL only if link_allowed.
+   - reply_bait: a prompt that invites replies (e.g. "reply with the worst commit message you've ever pushed"). People who reply get our one automated reply later.
+   - joke: an original joke about SF tech life in general (deploys, standups, the fog, agents, burn rate). Never about a specific news item or trend, a real person or a company.
+   Put the store link (store_url) in only if link_allowed is true; new_design always carries its product URL. If x_post refuses (daily limit, too soon, duplicate, link rule), fix only what it says (e.g. drop the link) or accept it; don't rephrase to get around a limit.
+3. Scout queue: run up to 2 x_search queries for conversations where SF tech / AI-agent people joke about their work (e.g. '"vibe coding" -is:retweet lang:en', '"AI agents" (shipped OR deploy) -is:retweet lang:en'). Pick at most 2 posts where a reply from us would genuinely add a laugh, and draft them with x_post_scout (mode reply or quote, with a one-line why). They go to John's scout queue and he posts the ones he likes by hand (X's API won't let us reply to people who didn't mention us). Never reply to strangers any other way.
+End with: RESULT: {"replies":<n>,"pillar":"<pillar>","posted":"<post id or none>","announced":"<slug or none>","scout_drafts":<n>}`;
+
 export const TIMEZONE = "America/Los_Angeles";
 export function scheduleDefs() {
   const d1 = DROPS["drop-1"];
   return [
-    { key: "growth", agent: "growth", cron: "20 8-23/3 * * *", budget_micro_usd: 1_500_000, label: "Growth: replies + 1 post + scout, every 3 h (08:20-23:20)",
+    // Growth every 1.5 h, 08:20-23:20 PT: cron can't say "90 min", so two deployments interleave (8:20, 9:50, 11:20, ... 23:20)
+    { key: "growth", agent: "growth", cron: "20 8-23/3 * * *", budget_micro_usd: 1_500_000, label: "Growth A: replies + 1 rotated post + scout (08:20, 11:20, ... 23:20)", input_template: GROWTH_RUN },
+    { key: "growth-b", agent: "growth", cron: "50 9-23/3 * * *", budget_micro_usd: 1_500_000, label: "Growth B: same run, interleaved (09:50, 12:50, ... 21:50)", input_template: GROWTH_RUN },
+    { key: "product", agent: "product", cron: "0 10,16 * * *", budget_micro_usd: 2_000_000, label: "Product: trends -> 1-2 designs -> propose to the CEO, 10:00 and 16:00",
       input_template:
-`Scheduled Growth run.
-1. store_link: note whether the store is live and its URL.
-2. x_mentions. For each post with engaged=true and already_replied=false (at most 10 this run), send ONE x_reply in brand voice: short, warm, specific to what they said. Skip spam, bots and hostile posts. If someone complains or asks about money, refunds or an order problem, don't argue in public: flag_john (reason complaint/money, ref = the post URL) and reply only "sorry about that, a human is on it. email ${CONTACT.email}".
-3. One original post with x_post. Alternate between (a) a brand post about the drop (the black tee: Hallucinated wordmark on the front, "> git reset --hard" over a line-art SF map on the back; we're a company run by AI agents) and (b) a reply-bait post that invites replies, e.g. "reply with the worst commit message you've ever pushed. the agents put the best one on a shirt." Put the store URL in it if store_link says it's available; otherwise no link. If x_post refuses (daily limit, too soon after the last post, duplicate), accept it and move on; don't rephrase to get around a limit. Never post about trending topics or news.
-4. Scout queue: run up to 2 x_search queries for conversations where SF tech / AI-agent people joke about their work (e.g. '"vibe coding" -is:retweet lang:en', '"AI agents" (shipped OR deploy) -is:retweet lang:en'). Pick at most 2 posts where a reply from us would genuinely add a laugh, and draft them with x_post_scout (mode reply or quote, with a one-line why). They go to John's scout queue and he posts the ones he likes by hand (X's API won't let us reply to people who didn't mention us). Never reply to strangers any other way.
-End with: RESULT: {"replies":<n>,"posted":"<post id or none>","scout_drafts":<n>,"store_link":true|false}` },
+`Scheduled design run. Make 1 or 2 new back-print tees that SF tech people would find funny right now, and propose them.
+1. Research (read what people actually joke about; you can't post anything):
+   - trends 2 or 3 times with different queries about SF / AI / startup life right now (e.g. "AI agents", "vibe coding", "san francisco startup"), platforms ["reddit","hn","threads","tiktok"];
+   - x_search once or twice (e.g. '"AI agents" -is:retweet lang:en').
+2. Pick 1-2 ideas. ${DESIGN_RULES} Prefer a short line of text (a command, an error, a fake spec) with one simple line-art image, like our "> git reset --hard" tee. Keep the printed text to ONE line of at most 5 words, plain ASCII (no em-dashes, no fancy quotes): the image model garbles longer or multi-line text, and every garbled letter fails QA.
+3. For each idea, write the brief in your message for the record (2-3 sentences: the joke, the print, why now and for whom). Then generate_design with placement "back", the exact text, and references ["git-reset-back"] for our house style. If it fails QA, fix exactly the issues it lists and try again: at most 3 attempts per idea, then drop the idea.
+4. For each passing design: propose_design with the design_id, a short title, a slug ending in -tee, the pitch, the trend summary and 1-6 sources (the real post/thread URLs the tools returned; never invent a URL), and print_line. If it's refused (guardrails, daily limit, slug taken), accept it: change the slug if it was taken, otherwise drop the idea. Never reword a name to dodge the check.
+The CEO agent decides each proposal in its own session; you don't wait for it.
+End with: RESULT: {"ideas":<n>,"attempts":<n>,"proposed":["<proposal_id>",...],"dropped":"<why, or none>"}` },
     { key: "support", agent: "support", cron: "*/15 * * * *", budget_micro_usd: 600_000, label: "Support: inbox every 15 min",
       input_template:
 `Scheduled inbox run. Call inbox_list. If it is empty, end right away with RESULT: {"handled":0}.

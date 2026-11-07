@@ -5,7 +5,7 @@ process.on("unhandledRejection", (e) => { console.error(e); });
 //                                                   # existing ones keep their current on/off state
 //   node agents/setup_agents.mjs --enable-schedules # also turn every deployment on
 //   node agents/setup_agents.mjs --pause-schedules  # turn every deployment off
-//   --trends-allow   Product's trends tool runs without an approval card (~$0.001/call, daily cap in the tool)
+//   --trends-allow   (no-op now: Product's trends tool is always "allow"; the tool still refuses any call over $0.01)
 //   --run <growth|support|ops-sales>   fire that deployment once now (whatever its schedule state), print the session id
 import fs from "node:fs";
 import path from "node:path";
@@ -51,19 +51,27 @@ for (const [key, def] of Object.entries(DEFS)) {
   log(`agent ${def.name} ${agents[key].id} v${agents[key].current_version} model ${agents[key].model} mcp ${agents[key].mcp_servers?.[0]?.url || "none"}`);
 }
 
-// Deployments: one per schedule def, matched by agent (each agent has at most one).
+// Deployments: one per schedule KEY (an agent may have several, e.g. Growth A + B). The key is stamped as the template's
+// last line "[schedule: <key>]". A deployment made before keys existed is adopted by the def with the same agent and cron
+// (or, if the agent has a single def, by that def).
 const existing = [];
 for (let after; ;) { const p = await v.deployments.list({ limit: 100, ...(after ? { after } : {}) }); existing.push(...p.data); if (!p.has_more) break; after = p.next_cursor; }
-const deps = {};
+const tag = (k) => `[schedule: ${k}]`;
+const keyOf = (d) => (String(d.input_template || "").match(/\[schedule: ([a-z0-9-]+)\]\s*$/) || [])[1] || null;
+const claimed = new Set(), deps = {};
 for (const s of scheduleDefs()) {
   const a = agents[s.agent];
-  const mine = existing.filter((d) => d.agent_id === a.id);
-  const cfg = { cron: s.cron, timezone: TIMEZONE, input_template: s.input_template, budget_micro_usd: s.budget_micro_usd, window: "immediate",
+  const free = (d) => d.agent_id === a.id && !claimed.has(d.id);
+  let mine = existing.filter((d) => free(d) && keyOf(d) === s.key);
+  if (!mine.length) mine = existing.filter((d) => free(d) && !keyOf(d) && d.cron === s.cron);
+  if (!mine.length && scheduleDefs().filter((x) => x.agent === s.agent).length === 1) mine = existing.filter((d) => free(d) && !keyOf(d));
+  for (const d of mine) claimed.add(d.id);
+  const cfg = { cron: s.cron, timezone: TIMEZONE, input_template: `${s.input_template}\n${tag(s.key)}`, budget_micro_usd: s.budget_micro_usd, window: "immediate",
     identity: DEFS[s.agent].identity ? identity.id : null };
   let d;
   if (mine[0]) {
     d = await v.deployments.update(mine[0].id, { ...cfg, ...(mine[0].agent_version != null ? { agent_version: a.current_version } : {}) });
-    for (const extra of mine.slice(1)) { await v.deployments.update(extra.id, { enabled: false }).catch(() => {}); log(`  extra deployment ${extra.id} for ${a.name} turned off (delete it in Studio if unwanted)`); }
+    for (const extra of mine.slice(1)) { await v.deployments.update(extra.id, { enabled: false }).catch(() => {}); log(`  duplicate deployment ${extra.id} for ${s.key} turned off (delete it in Studio if unwanted)`); }
   } else {
     d = await v.deployments.create({ agent_id: a.id, ...cfg, enabled: false });
     log(`  created deployment ${d.id} for ${a.name} (off)`);
