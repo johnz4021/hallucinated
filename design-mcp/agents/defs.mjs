@@ -27,7 +27,7 @@ export const ALL_MCP_TOOLS = [
   "preorders_list", "charge_preorders", "charge_preorders_status", "preorder_cancel", "preorder_send_payment_link",
 ];
 // Never confirmed by code, whatever an agent's config says: a human decides each call in Naïve Studio.
-export const NEVER_AUTO = new Set(["customania_handoff_payment", "courier_book", "x_ads_activate", "issue_card", "x_post_scout", "charge_preorders"].map((n) => `${MCP}.${n}`));
+export const NEVER_AUTO = new Set(["customania_handoff_payment", "courier_book", "x_ads_activate", "issue_card", "charge_preorders"].map((n) => `${MCP}.${n}`));
 
 // Built-ins off on every agent. GLM-5.2 is text-only: anything returning an image crashes the session.
 // social.post: X refuses Naïve's posting (we post through our own x_post). The rest spend money, act in public,
@@ -72,8 +72,8 @@ export function agentDefs({ live = false, trendsAllow = false } = {}) {
     },
     growth: {
       name: "hallucinated-growth",
-      system: VOICE + "\nYou are Growth. You run the brand's X account (@hallucinateddpt) through the hallucinated x_* tools, inside X's automation rules (brand.json x_rules; the tools enforce them too): original posts with x_post, exactly one automated reply per person who replied to, mentioned or quoted us with x_reply, and replies or quotes to anyone else only as drafts through x_post_scout, which John approves one by one. Every post that sells carries the store URL from store_link; if store_link says it's not available, never invent a link. Never post about trending topics or news, never like, follow or DM. One joke per post. " + NO_MONEY,
-      tools: { x_post: "allow", x_mentions: "allow", x_reply: "allow", x_search: "allow", x_post_scout: "ask", store_link: "allow", flag_john: "allow" },
+      system: VOICE + "\nYou are Growth. You run the brand's X account (@hallucinateddpt) through the hallucinated x_* tools, inside X's automation rules (brand.json x_rules; the tools enforce them too): original posts with x_post, exactly one automated reply per person who replied to, mentioned or quoted us with x_reply, and replies or quotes to anyone else only as drafts through x_post_scout, which queues them for John to post by hand. Every post that sells carries the store URL from store_link; if store_link says it's not available, never invent a link. Never post about trending topics or news, never like, follow or DM. One joke per post. " + NO_MONEY,
+      tools: { x_post: "allow", x_mentions: "allow", x_reply: "allow", x_search: "allow", x_post_scout: "allow", store_link: "allow", flag_john: "allow" },
     },
     support: {
       name: "hallucinated-support",
@@ -95,7 +95,7 @@ export function scheduleDefs() {
 1. store_link: note whether the store is live and its URL.
 2. x_mentions. For each post with engaged=true and already_replied=false (at most 10 this run), send ONE x_reply in brand voice: short, warm, specific to what they said. Skip spam, bots and hostile posts. If someone complains or asks about money, refunds or an order problem, don't argue in public: flag_john (reason complaint/money, ref = the post URL) and reply only "sorry about that, a human is on it. email ${CONTACT.email}".
 3. One original post with x_post. Alternate between (a) a brand post about the drop (the black tee: Hallucinated wordmark on the front, "> git reset --hard" over a line-art SF map on the back; we're a company run by AI agents) and (b) a reply-bait post that invites replies, e.g. "reply with the worst commit message you've ever pushed. the agents put the best one on a shirt." Put the store URL in it if store_link says it's available; otherwise no link. If x_post refuses (daily limit, too soon after the last post, duplicate), accept it and move on; don't rephrase to get around a limit. Never post about trending topics or news.
-4. Scout queue: run up to 2 x_search queries for conversations where SF tech / AI-agent people joke about their work (e.g. '"vibe coding" -is:retweet lang:en', '"AI agents" (shipped OR deploy) -is:retweet lang:en'). Pick at most 2 posts where a reply from us would genuinely add a laugh, and draft them with x_post_scout (mode reply or quote, with a one-line why). Each waits for John's approval; that's expected. Never reply to strangers any other way.
+4. Scout queue: run up to 2 x_search queries for conversations where SF tech / AI-agent people joke about their work (e.g. '"vibe coding" -is:retweet lang:en', '"AI agents" (shipped OR deploy) -is:retweet lang:en'). Pick at most 2 posts where a reply from us would genuinely add a laugh, and draft them with x_post_scout (mode reply or quote, with a one-line why). They go to John's scout queue and he posts the ones he likes by hand (X's API won't let us reply to people who didn't mention us). Never reply to strangers any other way.
 End with: RESULT: {"replies":<n>,"posted":"<post id or none>","scout_drafts":<n>,"store_link":true|false}` },
     { key: "support", agent: "support", cron: "*/15 * * * *", budget_micro_usd: 600_000, label: "Support: inbox every 15 min",
       input_template:

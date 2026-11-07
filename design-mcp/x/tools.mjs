@@ -184,9 +184,12 @@ export function registerXTools(server, ctx) {
     } catch (e) { return err(`x_reply failed: ${e.message}`); }
   });
 
+  // X's API refuses replies/quotes to posts that don't mention us (403 "You can only reply to or quote posts where you
+  // are mentioned or are the author", seen Sat 14:18). So scouting is a draft queue: nothing is posted by code. Each draft
+  // gets an x.com intent link that opens the composer pre-filled; John posts the ones he likes by hand.
   server.registerTool("x_post_scout", {
-    title: "Reply to or quote a stranger's post (John approves each one)",
-    description: "For conversations found with x_search, from people who did NOT engage with us: posts your drafted reply or quote-post. Every call is held for John's approval in Naïve Studio; the card shows your draft, the target and your reason. One per author, at most X_MAX_SCOUT_PER_DAY (default 10) a day. Draft only replies that add something (a joke that lands, a useful point); never spammy, never just a link.",
+    title: "Queue a reply/quote draft for a stranger's post (John posts it by hand)",
+    description: "For conversations found with x_search, from people who did NOT engage with us: saves your drafted reply or quote to John's scout queue (scout-queue.json) with a one-click link. Nothing is posted: X's API doesn't allow replies to people who didn't mention us, so John posts the ones he likes himself. One per author, at most X_MAX_SCOUT_PER_DAY (default 10) a day. Draft only replies that add something (a joke that lands, a useful point); never spammy, never just a link.",
     inputSchema: {
       target_id: z.string().describe("id of the post to reply to or quote"),
       target_url: z.string().optional(),
@@ -202,11 +205,19 @@ export function registerXTools(server, ctx) {
       const l = loadLedger(ctx);
       if (l.scouted_authors[t.author_id]) return err(`refused: we already sent @${t.author} a scout ${l.scouted_authors[t.author_id].mode}`);
       if (since(l, "scout", 86400_000).length >= MAX_SCOUT_DAY()) return err(`refused: daily scout limit (${MAX_SCOUT_DAY()}) reached`);
-      const r = await publish({ text, ...(mode === "reply" ? { reply_to: target_id } : { quote: target_id }), kind: "x_post_scout" });
-      l.scouted_authors[t.author_id] = { username: t.author, tweet_id: t.id, post_id: r.id, mode, at: new Date().toISOString() };
-      l.posts.push({ kind: "scout", id: r.id, at: new Date().toISOString(), text, to: t.author, mode, why });
+      const at = new Date().toISOString();
+      const intent = mode === "reply"
+        ? `https://x.com/intent/post?in_reply_to=${encodeURIComponent(t.id)}&text=${encodeURIComponent(text)}`
+        : `https://x.com/intent/post?text=${encodeURIComponent(text + " " + (t.url || `https://x.com/i/status/${t.id}`))}`;
+      const qFile = path.join(ctx.rootDir, "scout-queue.json");
+      const q = fs.existsSync(qFile) ? JSON.parse(fs.readFileSync(qFile, "utf8")) : [];
+      q.push({ at, status: "pending", mode, to: t.author, target: t.url, target_text: String(t.text || "").slice(0, 280), draft: text, why, post_it: intent });
+      fs.writeFileSync(qFile, JSON.stringify(q, null, 2));
+      l.scouted_authors[t.author_id] = { username: t.author, tweet_id: t.id, mode, at, queued: true };
+      l.posts.push({ kind: "scout", id: null, at, text, to: t.author, mode, why, queued: true });
       saveLedger(ctx, l);
-      return txt({ ...r, mode, target: t.url });
+      ctx.log?.(`[scout] queued ${mode} to @${t.author} (${t.url}): ${JSON.stringify(text)}`);
+      return txt({ queued: true, posted: false, mode, target: t.url, note: "Saved to John's scout queue; he posts it by hand if he likes it. Nothing went out." });
     } catch (e) { return err(`x_post_scout failed: ${e.message}`); }
   });
 

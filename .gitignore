@@ -60,3 +60,4 @@ inbox-ledger.json
 stripe-flagged.json
 preorders-ledger.json
 *.tmp
+scout-queue.json
