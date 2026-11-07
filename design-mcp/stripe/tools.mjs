@@ -32,7 +32,8 @@ const form = (obj, pre = "") => Object.entries(obj).flatMap(([k, v]) => {
 }).join("&");
 
 export function stripeClient(rootDir) {
-  const key = envKey(rootDir, "STRIPE_SECRET_KEY");
+  // STRIPE_LIVE_OK=1 (process env on serve) switches to the live key; otherwise the test key. .env keeps both.
+  const key = (process.env.STRIPE_LIVE_OK === "1" && envKey(rootDir, "STRIPE_LIVE_SECRET_KEY")) || envKey(rootDir, "STRIPE_SECRET_KEY");
   const chk = stripeKeyCheck(key);
   if (!chk.ok) return { error: chk.why };
   const call = async (method, p, body, { idempotencyKey } = {}) => {

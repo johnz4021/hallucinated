@@ -10,5 +10,6 @@
 #   TRENDS_DAILY_BUDGET_USD=0.50, X_MAX_POSTS_PER_DAY=6, X_MIN_GAP_MIN=45, HANDOFF_TIMEOUT_MIN=15
 [ -f ~/.zshrc ] && source ~/.zshrc
 cd "$(dirname "$0")/design-mcp" || exit 1
+export STRIPE_LIVE_OK=1   # store is live (Sat 14:25): agents read STRIPE_LIVE_SECRET_KEY; unset to use the sandbox test key
 pkill -f "agents/serve.mjs" 2>/dev/null; sleep 1
 node agents/serve.mjs
