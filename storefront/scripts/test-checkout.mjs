@@ -2,11 +2,11 @@
 // Usage:
 //   node scripts/test-checkout.mjs <url> order      -> bag: tee M x1 + tee L x2, pays with 4242, checks line items
 //   node scripts/test-checkout.mjs <url> preorder   -> bag: hoodie M x1 + cap x1, saves 4242, checks customer + PM
-// Env VERCEL_BYPASS=<token> adds the deployment-protection bypass header (preview URLs).
+// Env VERCEL_OIDC=1 authenticates to a protected preview with the dev OIDC token from .env.local.
 import { chromium } from "playwright";
 import Stripe from "stripe";
 import { mkdirSync } from "node:fs";
-import { stripeKey } from "./root-env.mjs";
+import { envVar, stripeKey } from "./root-env.mjs";
 
 const url = (process.argv[2] ?? "http://localhost:3000").replace(/\/$/, "");
 const kind = process.argv[3] ?? "order";
@@ -24,8 +24,15 @@ const name = "Test Buyer";
 const browser = await chromium.launch();
 const ctx = await browser.newContext({
   viewport: { width: 390, height: 844 },
-  extraHTTPHeaders: process.env.VERCEL_BYPASS ? { "x-vercel-protection-bypass": process.env.VERCEL_BYPASS, "x-vercel-set-bypass-cookie": "true" } : {},
 });
+// Protected previews: VERCEL_OIDC=1 adds the linked project's short-lived dev OIDC token, only on requests
+// to the store's own origin (never to Stripe). Never printed.
+if (process.env.VERCEL_OIDC === "1") {
+  const token = envVar("VERCEL_OIDC_TOKEN");
+  const origin = new URL(url).origin;
+  await ctx.route((u) => u.origin === origin, (route) =>
+    route.continue({ headers: { ...route.request().headers(), "x-vercel-trusted-oidc-idp-token": token } }));
+}
 const page = await ctx.newPage();
 try {
   for (const it of plan) {

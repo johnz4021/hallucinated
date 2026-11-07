@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import type Stripe from "stripe";
-import { config, formatPrice } from "@/lib/config";
+import { config, datedWindows, formatPrice } from "@/lib/config";
 import { getStripe } from "@/lib/stripe";
 
 export const runtime = "nodejs";
@@ -91,7 +91,7 @@ export async function POST(req: Request) {
       });
     } else {
       const total = lines.reduce((s, l) => s + l.price.unit_amount! * l.quantity, 0);
-      const windows = [...new Set(lines.map((l) => l.product.metadata.launch_window).filter(Boolean))].join(", ");
+      const windows = datedWindows(lines.map((l) => l.product.metadata.launch_window));
       const preorderItems = JSON.stringify(lines.map((l) => ({ price_id: l.price.id, qty: l.quantity })));
       if (preorderItems.length > 500) return bad("Too many different pre-order items for one checkout. Split it in two.");
       const metadata: Record<string, string> = {
@@ -115,7 +115,8 @@ export async function POST(req: Request) {
         custom_text: {
           submit: {
             message:
-              `Pre-order: ${what}. You'll be charged ${formatPrice(total)} when this launches` +
+              `${lines.every((l) => l.product.metadata.origin === "agents") ? "Designed by the agents. " : ""}` +
+              `Pre-order: ${what}. You'll be charged ${formatPrice(total)} only if it launches` +
               `${windows ? ` (est. ${windows})` : ""}. If it never launches, you're never charged. ` +
               `Cancel any time before launch: email ${config.contactEmail}.`,
           },

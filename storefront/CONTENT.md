@@ -95,7 +95,9 @@ curl -s -X PATCH $BASE/api/admin/content -H "Authorization: Bearer $STORE_ADMIN_
   banners: [{ id, title /*≤120*/, subtitle? /*≤240*/, image /*https*/, image_alt, cta_label? /*≤40*/,
               cta_href? /* "/…" or https */, focus?: "left"|"right"|"center", active?: boolean, sort?: number }],
   lookbook: [{ id, image, alt, caption? /*≤200*/, product_slug?, drop? /* "drop-1" */, active?, sort? }],
-  drops: [{ id: "drop-<n>", n: number, title, tagline?, description?, status: "live"|"preorder"|"archived", image? }]
+  drops: [{ id: "drop-<n>", n: number, title, tagline?, description?, status: "live"|"preorder"|"archived", image? }],
+  designs: [{ id /* = slug */, slug, design_id, title, trend: { summary, sources: [{ label, url }] }, pitch,
+             ceo: { verdict: "approved", reason, at }, product_session?, ceo_session?, created_at }]   // see §4
 }
 ```
 - `id` is lowercase letters, digits and dashes.
@@ -141,3 +143,99 @@ Signups are Stripe Customers with `metadata.drop_alerts="yes"` (plus `drop_alert
 
 ### 3.4 Mixed carts
 The site doesn't allow mixing pay-now and pre-order items in one checkout. The API returns 400 for a mixed bag, and the UI offers "Start a new bag". Each session is therefore exactly one kind.
+
+---
+
+## 4. Agent-designed products: the publish flow
+
+The store shows these on the home page ("Fresh from the agents", newest 6), on `/new`, and on product pages with a "Why this exists" panel. Run the five steps below in order. `STORE` is always the production URL, **`https://hallucinated-store.vercel.app`**, even when testing on a preview or with the sandbox key: the site recognises its own mockup URLs on any of its hosts. Admin calls send `Authorization: Bearer $STORE_ADMIN_SECRET`.
+
+### Step 1. Upload the print (transparent PNG, light ink, made for a black tee)
+```bash
+curl -s -X POST "$STORE/api/admin/upload?name=<slug>-print" \
+  -H "Authorization: Bearer $STORE_ADMIN_SECRET" -H "Content-Type: image/png" --data-binary @print.png
+# -> {"url":"https://x2ww2cgnt2vbaqob.public.blob.vercel-storage.com/media/agents/<slug>-print-<rand>.png", ...}
+```
+Keep it under 4.4 MB; 2000 px on the long side is plenty. Downscale the 300-dpi print file first.
+
+### Step 2. Build the mockup URL (no call needed)
+```
+MOCKUP_BACK  = $STORE/api/mockup?side=back&print=<urlencoded print url>
+MOCKUP_FRONT = $STORE/api/mockup?side=front&print=<urlencoded print url>
+MOCKUP_FLAT  = $STORE/api/mockup?side=flat&print=<urlencoded print url>    # the print alone on shirt black
+```
+- The route returns a 1200×1500 PNG of a black tee with the print placed as it would be printed:
+  - `back`: centred between the shoulder blades, up to about 11 in wide;
+  - `front`: chest, up to about 10 in wide.
+- It's cached for a year (print URLs never change).
+- It only accepts print URLs on our own Blob store under `media/`; anything else gets a 400.
+- Use the side the design is printed on. A back print gets `MOCKUP_BACK` as its first image.
+
+### Step 3. Create the Stripe product and one price per size
+```bash
+P=$(curl -s https://api.stripe.com/v1/products -u "$STRIPE_SECRET_KEY:" \
+  -d name="<Title> tee" -d description="<one-line pitch>" \
+  -d "images[0]=$MOCKUP_BACK" -d "images[1]=$MOCKUP_FLAT" \
+  -d "marketing_features[0][name]=Black tee" -d "marketing_features[1][name]=Back: <what the print is>" \
+  -d "metadata[slug]=<slug>" -d "metadata[status]=preorder" -d "metadata[origin]=agents" \
+  -d "metadata[launch_window]=When it launches" -d "metadata[drop]=agents" \
+  -d "metadata[design_id]=<design id>" -d "metadata[garment]=tee" -d "metadata[color]=black" \
+  -d "metadata[category]=tees" -d "metadata[placement]=back" | jq -r .id)
+for SIZE in S M L XL; do
+  curl -s https://api.stripe.com/v1/prices -u "$STRIPE_SECRET_KEY:" -d product=$P -d unit_amount=6500 -d currency=usd \
+    -d lookup_key=<slug>-$(echo $SIZE | tr A-Z a-z) -d transfer_lookup_key=true \
+    -d "metadata[size]=$SIZE" -d "metadata[design_id]=<design id>" -d "metadata[garment]=tee" \
+    -d "metadata[color]=black" -d "metadata[drop]=agents" -d "metadata[slug]=<slug>" -d "metadata[origin]=agents"
+done
+```
+- **`slug`**: lowercase, digits and dashes, unique, e.g. `merge-conflict-tee`. Check that no active product already uses it.
+- **`origin=agents`**: puts the product in "Fresh from the agents" and on `/new`. Newest first, ordered by the product's `created` time.
+- **`status=preorder`**: always, for agent designs. The site never sells them pay-now: checkout saves a card, and the charge happens only at launch, through the ask-permission tool.
+- **`launch_window`**:
+  - Text without a digit ("When it launches") is shown as plain "Pre-order", with no date promised.
+  - A real month ("Jan 2027") is shown as "Est. Jan 2027".
+- **`placement`**: `back` or `front`. It decides which mockup is the product's first image and how the product page describes the print.
+- **Price**: `unit_amount` 6500, the same as drop 1, unless John says otherwise.
+- **Images**:
+  - `images[0]` is the card and first gallery image.
+  - Add `MOCKUP_FLAT` as the second image: the print on shirt black.
+  - Don't use the raw print URL as an image; light ink on a transparent background disappears on the site's light tiles.
+  - Up to 8 images in total.
+- **Sandbox vs live:** run with whichever `STRIPE_SECRET_KEY` the agents use. A sandbox product appears only on deployments using the sandbox key (previews), never in production.
+
+### Step 4. Write the dossier (the "why this exists" panel)
+```bash
+curl -s -X PATCH $STORE/api/admin/content -H "Authorization: Bearer $STORE_ADMIN_SECRET" -H "Content-Type: application/json" -d '{
+  "op": "upsert", "collection": "designs",
+  "item": {
+    "slug": "<slug>",
+    "design_id": "<design id>",
+    "title": "<Title>",
+    "trend": { "summary": "<2-3 sentences: what people in SF/tech were saying and why it is shirt-worthy>",
+               "sources": [ { "label": "r/sanfrancisco thread, 1.2k upvotes", "url": "https://..." } ] },
+    "pitch": "<Product agent: what the shirt is and why it works, 1-3 sentences>",
+    "ceo": { "verdict": "approved", "reason": "<CEO agent reason, verbatim>", "at": "2026-11-08T17:02:00Z" },
+    "product_session": "ses_...", "ceo_session": "ses_...",
+    "created_at": "2026-11-08T16:40:00Z"
+  } }'
+```
+- **Keyed by `slug`:** upserting the same slug merges the fields.
+- **Remove:** `{"op":"remove","collection":"designs","id":"<slug>"}`
+- **Limits:**
+  - `trend.summary` up to 600 characters;
+  - `pitch` up to 600;
+  - `ceo.reason` up to 800;
+  - `trend.sources` up to 6, each with a `label` (up to 120 characters) and an http(s) `url`.
+- **Visibility:** a dossier is shown only when an **active product with the same slug exists in that deployment's Stripe catalog**. Blob is shared across environments, so a sandbox dossier stays invisible in production.
+- **Sources** render as plain links and are never embedded. Use the real URLs the trend tool returned.
+
+### Step 5. Revalidate
+```bash
+curl -s -X POST $STORE/api/revalidate -H "Authorization: Bearer $STORE_ADMIN_SECRET" -d '{"what":"all"}'
+```
+- The product appears at `$STORE/p/<slug>`, on `$STORE/new` and on the home page.
+- **For a preview deployment, call that preview's own `/api/revalidate`;** otherwise wait up to 60 s for the catalog cache.
+
+### Retire or launch a design
+- **Hide:** set the product `active=false`, then revalidate. The dossier is hidden automatically; remove it if you like.
+- **Launch for real:** set `status=live` once it can actually be printed and handed over, then revalidate. Charging the saved pre-order cards is the agents' ask-permission tool (§3.2).

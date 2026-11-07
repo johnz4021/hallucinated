@@ -3,6 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { useState } from "react";
+import { datedWindows, localImage } from "@/lib/config";
 import { money, useCart } from "./cart";
 
 export default function CartView({ fulfilment, contact }: { fulfilment: string; contact: string }) {
@@ -38,20 +39,20 @@ export default function CartView({ fulfilment, contact }: { fulfilment: string; 
     );
 
   const pre = cart.kind === "preorder";
-  const windows = [...new Set(cart.lines.map((l) => l.launchWindow).filter(Boolean))].join(", ");
+  const windows = datedWindows(cart.lines.map((l) => l.launchWindow));
   return (
     <div className="cart">
       <ul className="cart-lines">
         {cart.lines.map((l) => (
           <li key={l.priceId} className="cart-line">
             <Link href={`/p/${l.slug}`} className="cart-thumb">
-              {l.image && <Image src={l.image} alt="" fill sizes="96px" />}
+              {l.image && <Image {...localImage(l.image)} alt="" fill sizes="96px" />}
             </Link>
             <div className="cart-info">
               <Link href={`/p/${l.slug}`} className="cart-name">{l.name}</Link>
               <span className="cart-meta">
                 {l.size === "OS" ? "One size" : `Size ${l.size}`}
-                {l.kind === "preorder" ? `. Pre-order${l.launchWindow ? `, est. ${l.launchWindow}` : ""}` : ""}
+                {l.kind === "preorder" ? `. Pre-order${datedWindows([l.launchWindow]) ? `, est. ${l.launchWindow}` : ""}` : ""}
               </span>
               <div className="cart-controls">
                 <div className="stepper small" role="group" aria-label={`Quantity of ${l.name}`}>
@@ -73,7 +74,7 @@ export default function CartView({ fulfilment, contact }: { fulfilment: string; 
         </div>
         <p className="sum-note">
           {pre
-            ? `Pre-order: you save a card now and we charge ${money(cart.subtotal)} when the drop launches${windows ? ` (est. ${windows})` : ""}. Never launches, never charged. Cancel before launch: ${contact}.`
+            ? `Pre-order: you save a card now and we charge ${money(cart.subtotal)} only if it launches${windows ? ` (est. ${windows})` : ""}. Never launches, never charged. Cancel before launch: ${contact}.`
             : fulfilment}
         </p>
         <button type="button" className="cta" onClick={checkout} disabled={busy}>

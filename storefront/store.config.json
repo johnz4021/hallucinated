@@ -9,15 +9,39 @@
   "max_qty_per_line": 5,
   "max_lines": 8,
   "categories": [
-    { "slug": "tees", "label": "Tees" },
-    { "slug": "hoodies", "label": "Hoodies" },
-    { "slug": "headwear", "label": "Headwear" },
-    { "slug": "accessories", "label": "Accessories" }
+    {
+      "slug": "tees",
+      "label": "Tees"
+    },
+    {
+      "slug": "hoodies",
+      "label": "Hoodies"
+    },
+    {
+      "slug": "headwear",
+      "label": "Headwear"
+    },
+    {
+      "slug": "accessories",
+      "label": "Accessories"
+    }
   ],
-  "size_order": ["XS", "S", "M", "L", "XL", "XXL", "OS"],
+  "size_order": [
+    "XS",
+    "S",
+    "M",
+    "L",
+    "XL",
+    "XXL",
+    "OS"
+  ],
   "legacy": {
     "_comment": "Drop-1 single price used by the first production page and the two fixture sessions. Archive it after the new site is promoted.",
     "lookup_key": "hallucinated-drop1-tee",
     "price_id": "price_1UZH8EBnHpN1EAwPy0NcjArA"
-  }
+  },
+  "blob_host": "x2ww2cgnt2vbaqob.public.blob.vercel-storage.com",
+  "store_hosts": [
+    "hallucinated-store.vercel.app"
+  ]
 }

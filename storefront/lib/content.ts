@@ -8,7 +8,7 @@ import type { Content } from "./content-schema";
 export const CONTENT_PREFIX = "content/v/";
 const KEEP = 20;
 
-const EMPTY: Content = { version: 1, updated_at: "1970-01-01T00:00:00.000Z", banners: [], lookbook: [], drops: [] };
+const EMPTY: Content = { version: 1, updated_at: "1970-01-01T00:00:00.000Z", banners: [], lookbook: [], drops: [], designs: [] };
 
 export class ContentConflict extends Error {}
 
@@ -49,13 +49,13 @@ export async function writeContent(content: Content, expectedVersion?: string | 
 export const getContent = unstable_cache(
   async () => {
     try {
-      return (await readContentFresh()).content;
+      return { ...EMPTY, ...(await readContentFresh()).content };
     } catch (e) {
       console.error("content read failed:", (e as Error).message);
       return EMPTY;
     }
   },
-  ["content-v2"],
+  ["content-v3"],
   { revalidate: 3600, tags: ["content"] },
 );
 

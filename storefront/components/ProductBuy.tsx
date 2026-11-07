@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { isDatedWindow } from "@/lib/config";
 import { type CartLine, money, useCart } from "./cart";
 
 type Props = {
@@ -12,9 +13,10 @@ type Props = {
   launchWindow: string | null;
   variants: { priceId: string; size: string; unitAmount: number }[];
   fulfilment: string;
+  agent?: boolean;
 };
 
-export default function ProductBuy({ slug, name, image, kind, launchWindow, variants, fulfilment }: Props) {
+export default function ProductBuy({ slug, name, image, kind, launchWindow, variants, fulfilment, agent = false }: Props) {
   const cart = useCart();
   const single = variants.length === 1;
   const [size, setSize] = useState<string | null>(single ? variants[0].size : null);
@@ -85,8 +87,9 @@ export default function ProductBuy({ slug, name, image, kind, launchWindow, vari
 
       {kind === "preorder" ? (
         <p className="buy-note">
-          Pre-order: we save your card now and charge {money(price * qty)} when it launches{launchWindow ? ` (est. ${launchWindow})` : ""}. If it never
-          launches, you&rsquo;re never charged. <Link href="/info#preorders">How pre-orders work</Link>
+          {agent ? "Designed by the agents. " : ""}Pre-order: you&rsquo;re charged {money(price * qty)} only if it launches
+          {isDatedWindow(launchWindow) ? ` (est. ${launchWindow})` : ""}. If it never launches, you&rsquo;re never charged. We save your card
+          at checkout; nothing is charged today. <Link href="/info#preorders">How pre-orders work</Link>
         </p>
       ) : (
         <p className="buy-note">{fulfilment}</p>

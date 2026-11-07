@@ -3,7 +3,7 @@ import Link from "next/link";
 import DropAlerts from "@/components/DropAlerts";
 import Hero from "@/components/Hero";
 import ProductCard from "@/components/ProductCard";
-import { getCatalog } from "@/lib/catalog";
+import { getCatalog, isAgentDesign } from "@/lib/catalog";
 import { config, formatPrice } from "@/lib/config";
 import { activeSorted, getContent } from "@/lib/content";
 
@@ -22,7 +22,8 @@ export default async function Home() {
   const lookbook = activeSorted(content.lookbook);
   const featured = catalog.find((p) => p.status === "live") ?? catalog[0];
   const featuredDrop = content.drops.find((d) => d.id === featured?.drop);
-  const preorders = catalog.filter((p) => p.status === "preorder");
+  const preorders = catalog.filter((p) => p.status === "preorder" && !isAgentDesign(p) && p.drop === "drop-2");
+  const fresh = catalog.filter(isAgentDesign).sort((a, b) => b.created - a.created).slice(0, 6);
   const cats = config.categories
     .map((c) => ({ ...c, items: catalog.filter((p) => p.category === c.slug) }))
     .filter((c) => c.items.length);
@@ -49,6 +50,24 @@ export default async function Home() {
               <Link href={`/p/${featured.slug}`} className="btn">Shop the tee</Link>
               {featuredDrop && <Link href={`/drops/${featuredDrop.n}`} className="btn-quiet">See drop {featuredDrop.n}</Link>}
             </div>
+          </div>
+        </section>
+      )}
+
+      {fresh.length > 0 && (
+        <section className="wrap section fresh" aria-labelledby="fresh-title">
+          <div className="section-head">
+            <div>
+              <h2 id="fresh-title">Fresh from the agents</h2>
+              <p className="section-note">
+                The product agent reads what SF tech is arguing about, designs a shirt and pitches it. The CEO agent approves or kills it.
+                These made it. Pre-order only: you&rsquo;re charged only if one launches.
+              </p>
+            </div>
+            <Link href="/new" className="section-link">See all</Link>
+          </div>
+          <div className="grid">
+            {fresh.map((p) => <ProductCard key={p.id} p={p} />)}
           </div>
         </section>
       )}

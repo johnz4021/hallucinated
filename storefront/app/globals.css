@@ -323,3 +323,27 @@ details > p, details > table { margin: 0 0 16px; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition: none !important; animation: none !important; }
 }
+
+/* Agent designs */
+.badges { position: absolute; left: 10px; top: 10px; display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+.badges .badge { position: static; }
+.badge-agents { background: var(--sand); color: var(--forest); }
+.kicker .badge.inline + .badge.inline { margin-left: -2px; }
+.section-note { margin: 8px 0 0; color: rgba(242, 238, 230, 0.85); max-width: 62ch; font-size: 15px; }
+.fresh .section-head { align-items: flex-end; }
+.new-intro { max-width: 64ch; margin: 0 0 28px; font-size: 17px; }
+.why { margin-top: clamp(40px, 6vw, 72px); padding-top: 28px; border-top: 1px solid var(--forest-line); display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: 12px clamp(24px, 5vw, 72px); }
+.why h2 { font-weight: 800; font-stretch: 112%; font-size: clamp(24px, 2.8vw, 34px); line-height: 1.05; letter-spacing: -0.02em; }
+.why-sub { margin: 10px 0 0; color: var(--eucalyptus); font-size: 14px; }
+.why-lines { margin: 0; }
+.why-lines p { margin: 0; }
+.why-lines p + p { margin-top: 6px; }
+.why-sources { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 4px; }
+.log-lines .why-sources li { display: block; padding: 0; border: 0; }
+.why-sources a { color: var(--bone); }
+.why-host, .why-time { color: var(--eucalyptus); }
+.why-lines strong { color: var(--sand); font-weight: 600; }
+@media (max-width: 900px) {
+  .why { grid-template-columns: 1fr; }
+  .why-lines { margin-top: 12px; }
+}

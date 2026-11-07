@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import type Stripe from "stripe";
 import ClearCart from "@/components/ClearCart";
-import { config, formatPrice, sentence } from "@/lib/config";
+import { config, datedWindows, formatPrice, sentence } from "@/lib/config";
 import { getStripe } from "@/lib/stripe";
 
 export const dynamic = "force-dynamic";
@@ -27,7 +27,7 @@ async function load(id?: string): Promise<View | null> {
           return `${it.qty} × ${(p.product as Stripe.Product).name}, ${p.metadata.size === "OS" ? "one size" : `size ${p.metadata.size}`}`;
         }),
       );
-      return { kind: "preorder", name, email, total: Number(s.metadata?.preorder_total ?? 0), window: s.metadata?.launch_window ?? "", lines };
+      return { kind: "preorder", name, email, total: Number(s.metadata?.preorder_total ?? 0), window: datedWindows((s.metadata?.launch_window ?? "").split(", ")), lines };
     }
     if (s.mode === "payment" && s.payment_status === "paid") {
       const lines = (s.line_items?.data ?? []).map((li) => {
@@ -56,7 +56,7 @@ export default async function Success({ searchParams }: { searchParams: Promise<
           <ul className="note-lines">{v.lines.map((l) => <li key={l}>{l}</li>)}</ul>
           {v.kind === "preorder" ? (
             <p>
-              Nothing was charged today. We&rsquo;ll charge {formatPrice(v.total)} to the card you saved when the drop launches
+              Nothing was charged today. We&rsquo;ll charge {formatPrice(v.total)} to the card you saved only if it launches
               {v.window ? ` (est. ${v.window})` : ""}. If it never launches, you&rsquo;re never charged. To cancel, email {config.contactEmail}.
             </p>
           ) : (

@@ -19,6 +19,9 @@ export type Product = {
   designId: string;
   status: Status;
   launchWindow: string | null;
+  origin: string;
+  placement: "front" | "back";
+  created: number;
   features: string[];
   sort: number;
   variants: Variant[];
@@ -58,6 +61,9 @@ async function fetchCatalog(): Promise<Product[]> {
         designId: p.metadata.design_id ?? "",
         status: p.metadata.status as Status,
         launchWindow: p.metadata.launch_window || null,
+        origin: p.metadata.origin ?? "",
+        placement: p.metadata.placement === "front" ? "front" : "back",
+        created: p.created,
         features: (p.marketing_features ?? []).map((f) => f.name).filter((n): n is string => !!n),
         sort: Number(p.metadata.sort ?? 100),
         variants,
@@ -76,3 +82,8 @@ export async function getProduct(slug: string) {
 }
 
 export const dropNumber = (drop: string) => Number(drop.replace(/^drop-/, "")) || null;
+
+export const isAgentDesign = (p: Product) => p.origin === "agents";
+export async function getAgentDesigns() {
+  return (await getCatalog()).filter(isAgentDesign).sort((a, b) => b.created - a.created);
+}

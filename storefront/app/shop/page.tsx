@@ -10,13 +10,14 @@ const AVAIL = [
   { slug: "all", label: "All" },
   { slug: "live", label: "In stock" },
   { slug: "preorder", label: "Pre-order" },
+  { slug: "agents", label: "Designed by the agents" },
 ];
 
 export default async function Shop({ searchParams }: { searchParams: Promise<{ category?: string; availability?: string }> }) {
   const { category = "all", availability = "all" } = await searchParams;
   const catalog = await getCatalog();
   const items = catalog.filter(
-    (p) => (category === "all" || p.category === category) && (availability === "all" || p.status === availability),
+    (p) => (category === "all" || p.category === category) && (availability === "all" || (availability === "agents" ? p.origin === "agents" : p.status === availability)),
   );
   const label = config.categories.find((c) => c.slug === category)?.label ?? "Everything";
   const href = (c: string, a: string) => {

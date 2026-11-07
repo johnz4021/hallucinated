@@ -5,8 +5,10 @@ import Gallery from "@/components/Gallery";
 import ProductBuy from "@/components/ProductBuy";
 import ProductCard from "@/components/ProductCard";
 import SizeGuide from "@/components/SizeGuide";
-import { dropNumber, getCatalog, getProduct } from "@/lib/catalog";
-import { config, formatPrice } from "@/lib/config";
+import WhyPanel from "@/components/WhyPanel";
+import { dropNumber, getCatalog, getProduct, isAgentDesign } from "@/lib/catalog";
+import { config, formatPrice, windowLabel } from "@/lib/config";
+import { getContent } from "@/lib/content";
 
 export const revalidate = 60;
 export const dynamicParams = true;
@@ -29,6 +31,10 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
   const n = dropNumber(p.drop);
   const more = (await getCatalog()).filter((x) => x.slug !== p.slug).slice(0, 4);
   const prices = [...new Set(p.variants.map((v) => v.unitAmount))];
+  const agent = isAgentDesign(p);
+  // A dossier shows only for a product that exists in this deployment's own catalog (we're on its page).
+  const dossier = agent ? ((await getContent()).designs ?? []).find((d) => d.slug === p.slug) ?? null : null;
+  const when = windowLabel(p.launchWindow);
 
   return (
     <div className="wrap page">
@@ -40,7 +46,10 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
         <Gallery images={p.images} name={p.name} />
         <div className="pdp-info">
           {p.status === "preorder" ? (
-            <p className="kicker"><span className="badge inline">Pre-order</span> {p.launchWindow ? `Est. ${p.launchWindow}` : ""}</p>
+            <p className="kicker">
+              {agent && <span className="badge inline badge-agents">Designed by the agents</span>}
+              <span className="badge inline">Pre-order</span> {when ?? ""}
+            </p>
           ) : (
             <p className="kicker">{n ? `Drop ${n}, in stock` : "In stock"}</p>
           )}
@@ -54,6 +63,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
             launchWindow={p.launchWindow}
             variants={p.variants.map(({ priceId, size, unitAmount }) => ({ priceId, size, unitAmount }))}
             fulfilment={config.fulfilment}
+            agent={agent}
           />
           <div className="pdp-details">
             <p>{p.description}</p>
@@ -66,16 +76,18 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
             <details>
               <summary>Who made this</summary>
               <p>
-                {p.status === "live"
-                  ? `Designed by our product agent (design ${p.designId}), approved by the CEO agent and ordered from an SF print shop by the ops agent. A human paid for the print run.`
-                  : "Our wordmark, put on new blanks by the agents for drop 2. The ops agent orders the run once pre-orders are in; a human approves the spend."}
+                {agent
+                  ? `The product agent spotted a trend, designed this (design ${p.designId}) and pitched it; the CEO agent approved it. Nobody has printed it yet: the ops agent orders a run only if it launches, and a human approves that spend.`
+                  : p.status === "live"
+                    ? `Designed by our product agent (design ${p.designId}), approved by the CEO agent and ordered from an SF print shop by the ops agent. A human paid for the print run.`
+                    : "Our wordmark, put on new blanks by the agents for drop 2. The ops agent orders the run once pre-orders are in; a human approves the spend."}
               </p>
             </details>
             <details>
               <summary>{p.status === "preorder" ? "Pre-orders and pickup" : "Pickup and shipping"}</summary>
               <p>
                 {p.status === "preorder"
-                  ? `Your card is saved at checkout and charged when the drop launches${p.launchWindow ? ` (est. ${p.launchWindow})` : ""}. If it never launches, you're never charged. To cancel before launch, email ${config.contactEmail}. `
+                  ? `Your card is saved at checkout and charged only if it launches${when ? ` (${when.toLowerCase()})` : ""}. If it never launches, you're never charged. To cancel before launch, email ${config.contactEmail}. `
                   : ""}
                 {config.fulfilment}. No shipping yet.
               </p>
@@ -83,6 +95,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
           </div>
         </div>
       </div>
+      {dossier && <WhyPanel d={dossier} />}
       {more.length > 0 && (
         <section className="section" aria-labelledby="more-title">
           <div className="section-head"><h2 id="more-title">More from Hallucinated</h2></div>
