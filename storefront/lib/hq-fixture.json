@@ -1,0 +1,361 @@
+{
+  "version": 1,
+  "generated_at": "2026-11-08T03:42:00.000Z",
+  "_fixture": "Preview-only sample data. Production shows only what the publisher sends.",
+  "counters": {
+    "designs_proposed": 4,
+    "designs_approved": 2,
+    "designs_rejected": 1,
+    "live_items": 6,
+    "x_posts": 9,
+    "orders": 3,
+    "revenue_usd": 260,
+    "agent_spend_usd": 7.84,
+    "human_approvals": 4
+  },
+  "designs": [
+    {
+      "design_id": "7c1e2a90b4d3",
+      "title": "Seed round, seed vibes",
+      "slug": null,
+      "artwork_url": null,
+      "status": "proposed",
+      "stages": {
+        "trend": {
+          "at": "2026-11-08T00:02:00.000Z",
+          "summary": "Founders comparing who raised a pre-seed on a two-slide deck this week.",
+          "sources": [
+            {
+              "label": "Hacker News thread (sample)",
+              "url": "https://news.ycombinator.com/"
+            }
+          ]
+        },
+        "designed": {
+          "at": "2026-11-08T00:09:00.000Z",
+          "session": "ses_sample_product_3"
+        },
+        "ceo": null,
+        "live": null,
+        "posted": null,
+        "ordered": null,
+        "customania": null,
+        "picked_up": null
+      }
+    },
+    {
+      "design_id": "ba3fd7d6b1f3",
+      "title": "Agent stuck in standup",
+      "slug": "agent-stuck-in-standup-tee",
+      "artwork_url": "https://hallucinated-store.vercel.app/api/mockup?side=flat&print=https%3A%2F%2Fx2ww2cgnt2vbaqob.public.blob.vercel-storage.com%2Fmedia%2Fagents%2Fagent-stuck-in-standup-tee-print-jneqMfqNecKeqyWDmvCtbsr66nodxC.png",
+      "status": "live",
+      "stages": {
+        "trend": {
+          "at": "2026-11-07T22:55:00.000Z",
+          "summary": "Engineers joking that their AI agents now attend standup and report 'blocked' every day.",
+          "sources": [
+            {
+              "label": "r/ExperiencedDevs thread (sample)",
+              "url": "https://www.reddit.com/r/ExperiencedDevs/"
+            }
+          ]
+        },
+        "designed": {
+          "at": "2026-11-07T23:01:00.000Z",
+          "session": "ses_sample_product_2"
+        },
+        "ceo": {
+          "decision": "approved",
+          "reason": "Every PM in SF has watched a status update take eleven minutes. One line, one traffic light, prints clean. Approved.",
+          "at": "2026-11-07T23:04:00.000Z",
+          "session": "ses_sample_ceo_2"
+        },
+        "live": {
+          "at": "2026-11-07T23:04:00.000Z",
+          "url": "https://hallucinated-store.vercel.app/p/agent-stuck-in-standup-tee"
+        },
+        "posted": {
+          "at": "2026-11-07T23:30:00.000Z",
+          "url": "https://x.com/hallucinateddpt"
+        },
+        "ordered": null,
+        "customania": null,
+        "picked_up": null
+      }
+    },
+    {
+      "design_id": "5f0aa1c2e7d8",
+      "title": "Hustle culture robot",
+      "slug": null,
+      "artwork_url": null,
+      "status": "rejected",
+      "stages": {
+        "trend": {
+          "at": "2026-11-07T19:40:00.000Z",
+          "summary": "Accounts posting 4 a.m. routines, cold plunges and 'I don't believe in weekends'.",
+          "sources": [
+            {
+              "label": "X search, 'grindset' (sample)",
+              "url": "https://x.com/search?q=grindset"
+            }
+          ]
+        },
+        "designed": {
+          "at": "2026-11-07T19:48:00.000Z",
+          "session": "ses_sample_product_0"
+        },
+        "ceo": {
+          "decision": "rejected",
+          "reason": "The robot has six fingers on one hand and four on the other, and the joke needs a thread to explain it. We roast the moment, not a guy with a cold plunge. Rejected. Try again after lunch.",
+          "at": "2026-11-07T19:52:00.000Z",
+          "session": "ses_sample_ceo_0"
+        },
+        "live": null,
+        "posted": null,
+        "ordered": null,
+        "customania": null,
+        "picked_up": null
+      }
+    },
+    {
+      "design_id": "bc1dbe9d9aae",
+      "title": "git reset --hard",
+      "slug": "git-reset-hard-tee",
+      "artwork_url": "https://x2ww2cgnt2vbaqob.public.blob.vercel-storage.com/media/v2/tee-back.jpg",
+      "status": "shipped",
+      "stages": {
+        "trend": {
+          "at": "2026-11-07T19:58:00.000Z",
+          "summary": "SF engineers venting about force-pushes and Friday rollbacks; 'git reset --hard' as a life philosophy.",
+          "sources": [
+            {
+              "label": "Hacker News front page (sample)",
+              "url": "https://news.ycombinator.com/"
+            }
+          ]
+        },
+        "designed": {
+          "at": "2026-11-07T20:20:00.000Z",
+          "session": "ses_h2jy2sam2jcmmcmt12zqd9zx7g"
+        },
+        "ceo": {
+          "decision": "approved",
+          "reason": "Dry, insider, not mean. The map makes it ours instead of generic dev humor, and bone on black prints clean. Approved for drop 1.",
+          "at": "2026-11-07T20:31:00.000Z",
+          "session": "ses_b4rztbp3drbhszjs3ednfwp784"
+        },
+        "live": {
+          "at": "2026-11-07T21:30:00.000Z",
+          "url": "https://hallucinated-store.vercel.app/p/git-reset-hard-tee"
+        },
+        "posted": {
+          "at": "2026-11-07T22:05:00.000Z",
+          "url": "https://x.com/hallucinateddpt"
+        },
+        "ordered": {
+          "at": "2026-11-08T01:20:00.000Z",
+          "count": 4,
+          "sizes": {
+            "S": 1,
+            "M": 1,
+            "L": 1,
+            "XL": 1
+          },
+          "amount_usd": 260
+        },
+        "customania": {
+          "at": "2026-11-07T20:50:00.000Z",
+          "order_ref": "CF5A93CRK",
+          "amount_usd": 204.22
+        },
+        "picked_up": {
+          "at": "2026-11-08T03:31:00.000Z",
+          "status": "booked",
+          "note": "Uber Courier booked for the 7:30 to 8:00 pm window, $17.67"
+        }
+      }
+    }
+  ],
+  "by_agent": {
+    "product": [
+      {
+        "at": "2026-11-08T00:09:00.000Z",
+        "text": "Drafted 'Seed round, seed vibes' from a pre-seed thread"
+      },
+      {
+        "at": "2026-11-07T23:01:00.000Z",
+        "text": "Designed 'Agent stuck in standup' (ba3fd7d6b1f3)",
+        "url": "https://hallucinated-store.vercel.app/p/agent-stuck-in-standup-tee"
+      },
+      {
+        "at": "2026-11-07T19:48:00.000Z",
+        "text": "Designed 'Hustle culture robot'. It did not go well."
+      },
+      {
+        "at": "2026-11-07T20:20:00.000Z",
+        "text": "Designed drop 1: git reset --hard over a line-art SF map (bc1dbe9d9aae)",
+        "url": "https://hallucinated-store.vercel.app/p/git-reset-hard-tee"
+      }
+    ],
+    "ceo": [
+      {
+        "at": "2026-11-07T23:04:00.000Z",
+        "text": "Approved 'Agent stuck in standup'"
+      },
+      {
+        "at": "2026-11-07T20:31:00.000Z",
+        "text": "Approved drop 1, with reasons"
+      },
+      {
+        "at": "2026-11-07T19:52:00.000Z",
+        "text": "Rejected 'Hustle culture robot' (finger count)"
+      }
+    ],
+    "ops": [
+      {
+        "at": "2026-11-08T03:31:00.000Z",
+        "text": "Booked an Uber Courier pickup from the print shop, after the founder approved $17.67"
+      },
+      {
+        "at": "2026-11-07T20:50:00.000Z",
+        "text": "Placed front and back prints at Customania and checked out 4 black tees (order CF5A93CRK)"
+      }
+    ],
+    "growth": [
+      {
+        "at": "2026-11-07T23:30:00.000Z",
+        "text": "Posted 'Agent stuck in standup' on X",
+        "url": "https://x.com/hallucinateddpt"
+      },
+      {
+        "at": "2026-11-07T22:05:00.000Z",
+        "text": "Posted drop 1 on X with the store link",
+        "url": "https://x.com/hallucinateddpt"
+      }
+    ],
+    "support": [
+      {
+        "at": "2026-11-08T02:02:00.000Z",
+        "text": "Answered a sizing question (L or XL for 6'1\"): said L, regular fit"
+      },
+      {
+        "at": "2026-11-07T21:10:00.000Z",
+        "text": "Logged Customania's order confirmation email"
+      }
+    ]
+  },
+  "timeline": [
+    {
+      "at": "2026-11-08T03:31:00.000Z",
+      "agent": "ops",
+      "kind": "courier_booked",
+      "text": "Courier booked for the 7:30 to 8:00 pm window ($17.67)"
+    },
+    {
+      "at": "2026-11-08T03:29:00.000Z",
+      "agent": "founder",
+      "kind": "approval",
+      "text": "Founder approved the courier booking"
+    },
+    {
+      "at": "2026-11-08T02:02:00.000Z",
+      "agent": "support",
+      "kind": "email",
+      "text": "Answered a sizing question"
+    },
+    {
+      "at": "2026-11-08T01:20:00.000Z",
+      "agent": "ops",
+      "kind": "order",
+      "text": "New paid order: 2 tees (git reset --hard, M and L)"
+    },
+    {
+      "at": "2026-11-08T00:09:00.000Z",
+      "agent": "product",
+      "kind": "designed",
+      "text": "Drafted 'Seed round, seed vibes'; waiting on the CEO"
+    },
+    {
+      "at": "2026-11-07T23:30:00.000Z",
+      "agent": "growth",
+      "kind": "x_post",
+      "text": "Posted 'Agent stuck in standup' on X",
+      "url": "https://x.com/hallucinateddpt"
+    },
+    {
+      "at": "2026-11-07T23:04:00.000Z",
+      "agent": "ceo",
+      "kind": "approved",
+      "text": "Approved 'Agent stuck in standup'; now on the store as a pre-order",
+      "url": "https://hallucinated-store.vercel.app/p/agent-stuck-in-standup-tee"
+    },
+    {
+      "at": "2026-11-07T23:01:00.000Z",
+      "agent": "product",
+      "kind": "designed",
+      "text": "Designed 'Agent stuck in standup'"
+    },
+    {
+      "at": "2026-11-07T22:05:00.000Z",
+      "agent": "growth",
+      "kind": "x_post",
+      "text": "Posted drop 1 on X",
+      "url": "https://x.com/hallucinateddpt"
+    },
+    {
+      "at": "2026-11-07T21:30:00.000Z",
+      "agent": "ops",
+      "kind": "live",
+      "text": "Drop 1 is live on the store",
+      "url": "https://hallucinated-store.vercel.app/p/git-reset-hard-tee"
+    },
+    {
+      "at": "2026-11-07T20:52:00.000Z",
+      "agent": "founder",
+      "kind": "payment",
+      "text": "Founder paid the Customania checkout ($204.22)"
+    },
+    {
+      "at": "2026-11-07T20:50:00.000Z",
+      "agent": "ops",
+      "kind": "customania",
+      "text": "Customania order CF5A93CRK ready for payment"
+    },
+    {
+      "at": "2026-11-07T20:31:00.000Z",
+      "agent": "ceo",
+      "kind": "approved",
+      "text": "Approved drop 1: git reset --hard"
+    },
+    {
+      "at": "2026-11-07T19:52:00.000Z",
+      "agent": "ceo",
+      "kind": "rejected",
+      "text": "Rejected 'Hustle culture robot': six fingers, four fingers, no joke"
+    }
+  ],
+  "human": [
+    {
+      "at": "2026-11-08T03:29:00.000Z",
+      "kind": "courier_approval",
+      "text": "Approved the courier booking. The agents can drive a phone but not a credit card.",
+      "amount_usd": 17.67
+    },
+    {
+      "at": "2026-11-07T20:52:00.000Z",
+      "kind": "payment_handoff",
+      "text": "Paid the print shop for drop 1. Ops filled the cart and handed over the card form.",
+      "amount_usd": 204.22
+    },
+    {
+      "at": "2026-11-07T20:30:00.000Z",
+      "kind": "approval",
+      "text": "Cleared a held tool call so the CEO could post its approval"
+    },
+    {
+      "at": "2026-11-07T18:15:00.000Z",
+      "kind": "approval",
+      "text": "Signed the X developer terms. The agents may not legally be persons."
+    }
+  ]
+}
