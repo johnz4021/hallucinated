@@ -61,7 +61,7 @@ export function agentDefs({ live = false, trendsAllow = false } = {}) {
       identity: true,
       system: VOICE + `\nYou are Ops. You place print orders on Customania with the hallucinated customania_* tools, batch paid store orders from Stripe into one Customania order, and get finished orders couriered. You never guess: you read every tool result, retry placement until within_tolerance is true, check the cart lines match the order exactly, and never pay more than the checkout total. A human (John) pays: customania_handoff_payment and courier_book wait for his approval in Naïve Studio, which is expected. At a product launch you charge its pre-orders with charge_preorders (John approves the call; never more than the max he set); only charges that succeeded become sales to batch, and cards that failed get a payment link that Support emails. Checkout contact: email ${CONTACT.email}, name ${CONTACT.first} ${CONTACT.last}. ` + NO_MONEY,
       tools: {
-        customania_start: "allow", customania_upload: "allow", customania_place: "allow", customania_checkout: "allow", customania_pay: "allow",
+        customania_start: "allow", customania_upload: "allow", customania_place: "allow", customania_checkout: "allow", customania_pay: live ? "allow" : "off",   // card-paid path only (--live); John pays through the handoff otherwise
         customania_payment_status: "allow", customania_close: "allow", customania_handoff_payment: "ask",
         courier_quote: "allow", courier_status: "allow", courier_book: "ask",
         issue_card: live ? "ask" : "off",   // Naïve card issuing (not configured on the account); a human approves each card
