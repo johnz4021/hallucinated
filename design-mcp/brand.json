@@ -1,0 +1,43 @@
+{
+  "name": "Hallucinated",
+  "shirt": "black tee (#1A1A1A)",
+  "palette": {
+    "bone": "#F2EEE6",
+    "eucalyptus": "#8A9A80",
+    "forest": "#2F3B2A",
+    "rust": "#A4442E",
+    "sand": "#CBB894"
+  },
+  "art_style": [
+    "flat screen-print artwork, solid colors only, crisp hard edges",
+    "no shirt, no mockup, no photo, no frame, no background box",
+    "no drop shadows, no gradients, no glow, no neon",
+    "empty areas must be fully transparent; do not fill shapes with black or dark gray"
+  ],
+  "banned": [
+    "real people or recognizable faces",
+    "real companies, products or their logos",
+    "other brands' logos or trade dress",
+    "political, sexual or mean-spirited content"
+  ],
+  "qa_checks": [
+    "all text is spelled exactly as required, with no extra, missing or garbled letters",
+    "if the logo appears, it matches the reference wordmark (not a different font)",
+    "no leftover background box, frame, shirt or mockup",
+    "colors stay close to the brand palette; no neon, no gradients",
+    "strong contrast and legible on a black shirt",
+    "nothing from the banned list",
+    "clean, minimal, confident: would a tech-Twitter streetwear account post it"
+  ],
+  "typography": "Text is set in a clean typeface: monospace for commands/code (like a terminal), a heavy tight grotesk for headlines. Crisp, evenly spaced, no handwritten or distorted letters.",
+  "references": {
+    "logo": {
+      "file": "refs/logo.png",
+      "use": "The attached image is the official Hallucinated logo: the word 'Hallucinated' with an offset eucalyptus ghost copy. When the design includes the logo or the word 'Hallucinated', reproduce this exact wordmark (same letterforms, weight and ghost offset); do not redraw or restyle it."
+    },
+    "git-reset-back": {
+      "file": "refs/git-reset-back.png",
+      "use": "The attached image is our approved back graphic. Use it as the style reference for line weight, palette and composition; do not copy it unless asked."
+    }
+  }
+}

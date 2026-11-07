@@ -1,0 +1,48 @@
+# secrets
+.env
+.env.*
+*.pem
+
+# browser profile (saved logins/cookies for Customania)
+.pw-chrome-profile/
+
+# run output: checkout screenshots and logs contain billing address, email, session ids
+customania-runs/
+customania-inspect/
+order-runs/
+design-runs/
+*.log
+test-*.png
+
+# generated media (large; keep only what you choose to publish)
+ad-test/
+e2e/
+design-test/
+.naive-test/
+
+# deps / leftovers
+node_modules/
+*.new
+__pycache__/
+.DS_Store
+x-connect-link.txt
+
+# serve.command state (local URL)
+.serve.json
+serve.log
+
+# X Ads OAuth token
+.x-ads-token.json
+
+# test output / scratch
+trends-test*.json
+Claude outputs/
+customania_upload_test.py
+*.command.new
+*.mjs.new
+*.json.new
+
+# editor / tool state (may contain chat history)
+.specstory/
+.incoming/
+.cursorindexingignore
