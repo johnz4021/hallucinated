@@ -16,7 +16,8 @@ A streetwear brand on SF tech humor, run by Naïve agents (`@usenaive-sdk/vetta`
 - Research: Naïve `socialData` works for Reddit/Threads/TikTok/HN (~$0.001/call). Its X tools are listed but return 404. X search through our own keys **works** (Sat 13:11, 10 real posts): MCP tool `x_search` (read-only) for Growth's scout queue and for reading replies to our posts.
 - Parked: X Ads (permission form pending), Naïve card issuing (not configured on the account), so **a human pays for everything**.
 
-## Next: close the loop (run as two parallel subagents, briefs in HANDOFF.md)
+## Next: close the loop
+0. **Live by 6:45 pm today:** order ledger (seed CF5A93CRK) + email-triggered pickup (John relays Customania's "pick up by 7:30, close at 8" to hallucinated@agentmail.to → inbox agent marks it ready → Ops books an Uber Courier ~7:00 pm from John's phone with his OK) + a 7:00 pm daily schedule as backstop. Details in HANDOFF.md (Subagent B). (run as two parallel subagents, briefs in HANDOFF.md)
 1. **Storefront** (Subagent A): one-page store on Vercel + real Stripe Checkout (test mode until John says live). Writes `store.json` (URL + price ID).
 2. **Agents** (Subagent B): Growth (reply-bait posts + one auto-reply per person who replies/mentions us, scheduled posts, scout queue John approves, all via `x_post`), inbox agent on AgentMail (`hallucinated@agentmail.to`), `stripe_orders` → Ops batches paid orders into a Customania order with the human-pay handoff, `ready for pickup` email → `courier_quote` → `courier_book` (John approves), trends tool on Naïve socialData for Product.
 3. Last, only if time: a dashboard. Naïve Studio already shows chats, tool calls and approvals.
