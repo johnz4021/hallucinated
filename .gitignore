@@ -46,3 +46,17 @@ customania_upload_test.py
 .specstory/
 .incoming/
 .cursorindexingignore
+
+# agent state ledgers (customer emails, X handles, Stripe session ids, spend)
+flags.jsonl
+order-events.jsonl
+courier-requests.json
+x-ledger.json
+x-ledger.dry.json
+stripe-batched.json
+sales-batches.json
+trends-spend.json
+inbox-ledger.json
+stripe-flagged.json
+preorders-ledger.json
+*.tmp

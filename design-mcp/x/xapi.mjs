@@ -119,3 +119,39 @@ export async function xSearch(keys, query, max = 10) {
   return (r.data || []).map((t) => ({ id: t.id, url: `https://x.com/${users[t.author_id]?.username || "i"}/status/${t.id}`, author: users[t.author_id]?.username,
     followers: users[t.author_id]?.public_metrics?.followers_count, text: t.text, created_at: t.created_at, ...t.public_metrics }));
 }
+
+const TWEET_FIELDS = "author_id,conversation_id,created_at,in_reply_to_user_id,referenced_tweets,entities,public_metrics";
+const mapTweet = (t, users) => ({ id: t.id, author_id: t.author_id, author: users[t.author_id]?.username, followers: users[t.author_id]?.public_metrics?.followers_count,
+  text: t.text, created_at: t.created_at, conversation_id: t.conversation_id, in_reply_to_user_id: t.in_reply_to_user_id || null,
+  referenced: (t.referenced_tweets || []).map((r) => ({ type: r.type, id: r.id })), mentions: (t.entities?.mentions || []).map((m) => ({ id: m.id, username: m.username })),
+  url: `https://x.com/${users[t.author_id]?.username || "i"}/status/${t.id}`, ...t.public_metrics });
+
+// Posts that mention or reply to the account (replies to our posts start with @us, so they're mentions too). Read-only.
+export async function xMentions(keys, userId, { since_id, max = 20 } = {}) {
+  const qs = new URLSearchParams({ max_results: String(Math.min(Math.max(max, 5), 100)), "tweet.fields": TWEET_FIELDS,
+    expansions: "author_id,referenced_tweets.id.author_id", "user.fields": "username,public_metrics" });
+  if (since_id) qs.set("since_id", since_id);
+  const r = await call(keys, "GET", `/2/users/${userId}/mentions?${qs}`);
+  const users = Object.fromEntries((r.includes?.users || []).map((u) => [u.id, u]));
+  const refAuthors = Object.fromEntries((r.includes?.tweets || []).map((t) => [t.id, t.author_id]));
+  return (r.data || []).map((t) => ({ ...mapTweet(t, users), referenced: (t.referenced_tweets || []).map((x) => ({ type: x.type, id: x.id, author_id: refAuthors[x.id] || null })) }));
+}
+
+// One post by id, with the author of any post it replies to or quotes (to check it engaged with us).
+export async function xGetTweet(keys, id) {
+  const qs = new URLSearchParams({ "tweet.fields": TWEET_FIELDS, expansions: "author_id,referenced_tweets.id.author_id", "user.fields": "username,public_metrics" });
+  const r = await call(keys, "GET", `/2/tweets/${encodeURIComponent(id)}?${qs}`);
+  const users = Object.fromEntries((r.includes?.users || []).map((u) => [u.id, u]));
+  const refAuthors = Object.fromEntries((r.includes?.tweets || []).map((t) => [t.id, t.author_id]));
+  const t = mapTweet(r.data, users);
+  t.referenced = (r.data.referenced_tweets || []).map((x) => ({ type: x.type, id: x.id, author_id: refAuthors[x.id] || null }));
+  return t;
+}
+
+// Did this post engage with us: a reply to us, a mention of us, or a quote of our post (and not our own post)?
+export function engagedWithUs(t, me) {
+  if (!t || t.author_id === me.id) return false;
+  if (t.in_reply_to_user_id === me.id) return true;
+  if ((t.mentions || []).some((m) => m.id === me.id || String(m.username).toLowerCase() === String(me.username).toLowerCase())) return true;
+  return (t.referenced || []).some((r) => (r.type === "quoted" || r.type === "replied_to") && r.author_id === me.id);
+}

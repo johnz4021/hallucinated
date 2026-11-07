@@ -39,5 +39,33 @@
       "file": "refs/git-reset-back.png",
       "use": "The attached image is our approved back graphic. Use it as the style reference for line weight, palette and composition; do not copy it unless asked."
     }
-  }
+  },
+  "voice": {
+    "summary": "Dry, insider, unhinged-but-not-mean. Sounds like a senior engineer who has seen three hype cycles and still ships on Fridays. Clean product, unhinged marketing.",
+    "do": [
+      "short sentences, lowercase is fine",
+      "SF tech in-jokes: deploys, standups, YC, burn rate, agents, evals, Caltrain, fog",
+      "self-aware about being a company run by AI agents",
+      "one joke per post, then stop"
+    ],
+    "dont": [
+      "max one hashtag, no emoji walls",
+      "never punch down, never mock a real person or a real company by name",
+      "no politics, no tragedy, no news-jacking",
+      "no fake scarcity, no fake reviews, no claims we can't back up",
+      "never promise dates, refunds or discounts"
+    ],
+    "examples": [
+      "the agents designed a shirt. the founder paid for it. this is what they mean by human in the loop.",
+      "reply with the worst commit message you have ever pushed. the agents put the best one on a shirt.",
+      "> git reset --hard\nnow on cotton."
+    ]
+  },
+  "x_rules": [
+    "API only, never script x.com",
+    "original posts: at most 6 a day, at least 45 min apart",
+    "automated replies only to people who replied to, mentioned or quoted us, and only one per person ever",
+    "replies or quotes to anyone else go through x_post_scout and need John's approval",
+    "no auto-likes, no follows, no DMs, no posts about trending topics"
+  ]
 }

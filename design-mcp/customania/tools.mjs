@@ -9,6 +9,12 @@ import { createClient } from "@usenaive-sdk/vetta";
 import { CustomaniaSession } from "./customania.mjs";
 
 const sessions = new Map();
+let starting = false;
+// For the sales loop: is an order open in this process, and is a human payment handoff still waiting?
+export function orderSessionsInfo() {
+  const all = [...sessions.values()];
+  return { open: all.length, handoff_pending: all.filter((s) => s.payWatch && !s.payResult).length };
+}
 const txt = (o) => ({ content: [{ type: "text", text: JSON.stringify(o, null, 2) }] });
 const err = (m) => ({ isError: true, content: [{ type: "text", text: m }] });
 // screenshots are served from /runs so the dashboard (and you) can open them
@@ -30,12 +36,25 @@ export function registerCustomaniaTools(server, ctx) {
     description: "Opens a fresh Customania Design Lab session for a black Men's Premium Tee (empties the cart first). Returns an order_session id used by every other customania_* tool. One session = one order. base_size must be a size this order includes (the editor always keeps at least 1 of it).",
     inputSchema: { base_size: z.enum(["S", "M", "L", "XL", "2XL", "3XL"]).describe("any size that is in this order, e.g. the first one") },
   }, async ({ base_size }) => {
+    // One Chrome profile = one browser at a time: refuse a second start while one is launching or an order is open,
+    // and close the browser if a start fails (an orphaned Chrome keeps the profile locked for every retry).
+    if (starting) return err("refused: another customania_start is still launching; wait for it, don't start two at once");
+    if (sessions.size) return err(`refused: order session ${[...sessions.keys()].join(", ")} is still open; finish it or customania_close it first`);
+    starting = true;
+    const s = new CustomaniaSession({ root: ctx.rootDir, outDir: ctx.runsDir, log: ctx.log });
     try {
-      const s = new CustomaniaSession({ root: ctx.rootDir, outDir: ctx.runsDir, log: ctx.log });
       const r = await s.start({ baseSize: base_size });
+      // One editor page per order: agents sometimes call upload/place for front and back in parallel, which makes the
+      // editor measure the wrong side. Queue every editor action on this session so they run one at a time.
+      for (const m of ["upload", "place", "toCart", "checkout", "payWithCard"]) {
+        if (typeof s[m] !== "function") continue;
+        const f = s[m].bind(s);
+        s[m] = (...a) => (s._q = (s._q || Promise.resolve()).catch(() => {}).then(() => f(...a)));
+      }
       sessions.set(s.id, s);
       return txt(pubAll(ctx, { order_session: s.id, ...r }));
-    } catch (e) { return err("start failed: " + e.message); }
+    } catch (e) { await s.close().catch(() => {}); return err("start failed (browser closed; safe to retry once): " + e.message); }
+    finally { starting = false; }
   });
 
   server.registerTool("customania_upload", {

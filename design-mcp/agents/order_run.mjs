@@ -11,7 +11,8 @@ import crypto from "node:crypto";
 import { execFile } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { Tunnel, bin, install } from "cloudflared";
-import { createClient, withTool } from "@usenaive-sdk/vetta";
+import { createClient } from "@usenaive-sdk/vetta";
+import { agentDefs, defsByName, upsertAgent, autoConfirmable, pickModel } from "./defs.mjs";
 import { startServer } from "../server.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -50,9 +51,7 @@ log(`== drop #1 order run (${HUMAN_PAY ? "HUMAN PAY: agents do everything, you e
 // A fresh Naïve project (new API key) has no identity yet: create it. Connecting X is separate (connect_x.command).
 let identity = ((await v.identities.list({ limit: 50 })).data || []).find((i) => /hallucinated/i.test(i.name));
 if (!identity) { identity = await v.identities.create({ name: "Hallucinated", description: "Agent-run streetwear brand" }); log(`created identity ${identity.id} (new project)`); }
-const models = await v.models.list();
-const chat = (models.data || []).map((m) => m.id).filter((m) => !/:batch$/.test(m));
-const LLM = [/claude.*(sonnet|opus)/i, /gpt-5(?!-nano)/i, /GLM-5\.2/i].map((r) => chat.find((m) => r.test(m))).find(Boolean) || chat[0];
+const LLM = await pickModel(v);
 log(`identity ${identity.id}, model ${LLM}`);
 
 // ---- MCP server + public tunnel + vault credential ----
@@ -84,48 +83,18 @@ if (!publicUrl) {
   await sleep(3000);
 }
 
-// ---- agents (create or update by name) ----
-const BRAND = fs.readFileSync(path.join(MCP, "brand.json"), "utf8");
-async function upsertAgent(name, system, tune) {
-  // Update the agent in place if it exists, so every earlier run's chats stay visible in Naïve Studio
-  // (deleting and recreating would orphan them). Only the tunnel URL, prompt and tools change per run.
-  const list = await v.agents.list({ limit: 100 });
-  const same = (list.data || []).filter((a) => a.name === name);
-  const cfg = { name, model: LLM, window: "immediate", system, mcp_servers: [{ name: "hallucinated", url: publicUrl + "/mcp" }],
-    budget: { cap_micro_usd: 20_000_000, max_task_micro_usd: 10_000_000, period: "month" } };
-  let a = same[0] ? await v.agents.update(same[0].id, cfg).catch(() => null) : null;
-  if (!a) a = await v.agents.create(cfg);
-  let t = a.tools;
-  // GLM-5.2 is text-only: any tool that returns an image (view_image, browser screenshots) crashes the session.
-  for (const n of ["view_image", "generate_image", "generate_video", "social.post", "browser", "web_fetch"]) t = withTool(t, n, { enabled: false });
-  t = tune(t);
-  a = await v.agents.update(a.id, { tools: t });
-  const money = Object.entries(a.tools?.configs || {}).filter(([k]) => /^(card|wallet)\./.test(k)).map(([k, c]) => `${k}:${c.enabled ? c.permission : "off"}`);
-  log(`agent ${name} ${a.id}${money.length ? "  money tools: " + money.join(", ") : ""}`);
+// ---- agents (create or update by name; definitions live in agents/defs.mjs) ----
+const DEFS = agentDefs({ live: LIVE, trendsAllow: process.argv.includes("--trends-allow") });
+const BYNAME = defsByName(DEFS);
+async function upsert(key) {
+  const a = await upsertAgent(v, DEFS[key], { model: LLM, mcpUrl: publicUrl + "/mcp", log });
+  const money = Object.entries(a.tools?.configs || {}).filter(([k, c]) => c.enabled && c.permission === "ask").map(([k]) => k.replace(/^hallucinated\./, ""));
+  log(`agent ${a.name} ${a.id}${money.length ? "  ask tools: " + money.join(", ") : ""}`);
   return a;
 }
-const VOICE = "Hallucinated: an agent-run streetwear brand from SF tech culture. Clean product (minimal, natural palette), unhinged marketing. Brand rules: " + BRAND;
-const product = await upsertAgent("hallucinated-product",
-  VOICE + "\nYou are Product. You turn what's dominating AI and SF tech right now into shirt graphics. You make print files with the hallucinated generate_design tool; you can't see images, the tool checks each result and returns pass/fail with issues, and you fix the prompt until it passes.",
-  (t) => withTool(t, "hallucinated.generate_design", { enabled: true, permission: "allow" }));
-const ceo = await upsertAgent("hallucinated-ceo",
-  VOICE + "\nYou are the CEO. You approve or reject what ships, decisively, with a one-line reason. You also own the brand's X account.",
-  (t) => withTool(t, "social.post", { enabled: true, permission: "allow" }));
-try { await v.identities.attach(ceo.id, identity.id); } catch (e) { log("identities.attach ceo: " + e.message); }
-const ops = await upsertAgent("hallucinated-ops",
-  VOICE + "\nYou are Ops. You place print orders on Customania with the hallucinated customania_* tools and pay with Naïve prepaid cards. You never guess: you read every tool result, retry placement until within_tolerance is true, check the cart lines match the order exactly, and never pay more than the checkout total.",
-  (t) => {
-    for (const n of ["customania_start", "customania_upload", "customania_place", "customania_checkout", "customania_pay", "customania_payment_status", "customania_close"]) t = withTool(t, `hallucinated.${n}`, { enabled: true, permission: "allow" });
-    // Handing payment to a human goes through a Naïve approval card: that card in Studio is the "you're needed" notification.
-    t = withTool(t, "hallucinated.customania_handoff_payment", { enabled: true, permission: "ask" });
-    // Courier on John's phone (MobileRun + Uber): quotes and status freely, booking only with his OK in Studio.
-    t = withTool(t, "hallucinated.courier_quote", { enabled: true, permission: "allow" });
-    t = withTool(t, "hallucinated.courier_status", { enabled: true, permission: "allow" });
-    t = withTool(t, "hallucinated.courier_book", { enabled: true, permission: "ask" });
-    // Cards are issued through our own tool (Naïve's built-in card.issue isn't offered to this agent); a human approves each one.
-    t = withTool(t, "hallucinated.issue_card", { enabled: LIVE, permission: "ask" });
-    return t;
-  });
+const product = await upsert("product");
+const ceo = await upsert("ceo");
+const ops = await upsert("ops");
 try { await v.identities.attach(ops.id, identity.id); log("ops holds the Hallucinated identity"); } catch (e) { log("identities.attach ops: " + e.message); }
 
 // ---- run one agent session to completion, logging and recording it ----
@@ -157,7 +126,7 @@ async function run(label, agent, message, budget = 3_000_000) {
         // Naïve can re-hold a retried call under the same tool_call_id, so re-confirm anything still pending after 15s.
         const seen = approved.get(a.tool_call_id);
         if (seen && Date.now() - seen < 15000) continue;
-        if (/^hallucinated\./.test(a.name) && !["hallucinated.issue_card", "hallucinated.customania_handoff_payment", "hallucinated.courier_book", "hallucinated.x_ads_activate"].includes(a.name)) {
+        if (autoConfirmable(BYNAME, agent.name, a.name, agent.tools)) {
           await v.sessions.confirmTool(s.id, { tool_call_id: a.tool_call_id, decision: "allow", scope: "session", reason: "pre-approved tool (agent config: allow)" })
             .then(() => log(`  [${label}] orchestrator allowed held ${a.name} for this session (pre-approved tool)`))
             .catch((e) => log(`  [${label}] confirmTool ${a.name} failed: ${e.message}`));

@@ -7,6 +7,10 @@ import { generateDesign } from "./generate.mjs";
 import { registerCustomaniaTools } from "./customania/tools.mjs";
 import { registerXTools } from "./x/tools.mjs";
 import { registerCourierTools } from "./courier/tools.mjs";
+import { registerAgentMailTools } from "./agentmail/tools.mjs";
+import { registerStripeTools } from "./stripe/tools.mjs";
+import { registerTrendsTools } from "./trends/tools.mjs";
+import { registerPreorderTools } from "./stripe/preorders.mjs";
 
 export function buildMcp(ctx) {
   const server = new McpServer({ name: "hallucinated", version: "0.1.0" });
@@ -33,6 +37,10 @@ export function buildMcp(ctx) {
   if (ctx.rootDir) registerCustomaniaTools(server, ctx);
   if (ctx.rootDir) registerXTools(server, ctx);
   if (ctx.rootDir) registerCourierTools(server, ctx);
+  if (ctx.rootDir) registerAgentMailTools(server, ctx);
+  if (ctx.rootDir) registerStripeTools(server, ctx);
+  if (ctx.rootDir) registerTrendsTools(server, ctx);
+  if (ctx.rootDir) registerPreorderTools(server, ctx);
   return server;
 }
 

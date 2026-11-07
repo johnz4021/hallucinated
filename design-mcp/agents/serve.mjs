@@ -12,6 +12,8 @@ import { Tunnel, bin, install } from "cloudflared";
 import { createClient } from "@usenaive-sdk/vetta";
 import { startServer } from "../server.mjs";
 import { BILLING } from "./config.mjs";
+import { agentDefs, defsByName, autoConfirmable } from "./defs.mjs";
+import { execFile } from "node:child_process";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const MCP = path.resolve(HERE, ".."), ROOT = path.resolve(MCP, "..");
@@ -54,6 +56,7 @@ async function openTunnel() {
   for (const a of agents) await v.agents.update(a.id, { mcp_servers: [{ name: "hallucinated", url: url + "/mcp" }] }).catch((e) => log(`repoint ${a.name}: ${e.message}`));
   fs.writeFileSync(STATE, JSON.stringify({ url, port: PORT, pid: process.pid, started: new Date().toISOString() }, null, 2));
   log(`tools live at ${url} (repointed ${agents.length} agents: ${agents.map((a) => a.name).join(", ") || "none yet"})`);
+  await syncDeployments().catch((e) => log("deployment sync: " + e.message));
   tunnel.once("exit", async () => { log("tunnel dropped; reopening in 5 s"); await sleep(5000); openTunnel().catch((e) => log("reopen failed: " + e.message)); });
 }
 await openTunnel();
@@ -63,6 +66,55 @@ setInterval(async () => {
   const ok = await fetch(url + "/health", { signal: AbortSignal.timeout(15000) }).then((r) => r.ok).catch(() => false);
   if (!ok) { log("health check failed; restarting tunnel"); try { tunnel.stop(); } catch {} }
 }, 120_000);
+
+// A deployment pinned to an agent version keeps firing that version (with its old tunnel URL); move pins to the latest.
+async function syncDeployments() {
+  const agents = ((await v.agents.list({ limit: 100 })).data || []).filter((a) => /^hallucinated-/.test(a.name));
+  const byId = Object.fromEntries(agents.map((a) => [a.id, a]));
+  const deps = ((await v.deployments.list({ limit: 100 })).data || []).filter((d) => byId[d.agent_id]);
+  for (const d of deps) if (d.agent_version != null && d.agent_version !== byId[d.agent_id].current_version)
+    await v.deployments.update(d.id, { agent_version: byId[d.agent_id].current_version }).then(() => log(`deployment ${d.id} (${byId[d.agent_id].name}) now runs v${byId[d.agent_id].current_version}`));
+}
+
+// Hold clearing for sessions nobody is watching (deployments, Support -> Ops courier requests). Naïve sometimes holds a
+// call to a tool configured "allow"; confirm it only if defs.mjs says allow AND the live agent config says allow.
+// Never confirms an "ask" tool (payments, courier booking, scout replies, ads, cards): those wait for John in Studio,
+// and he gets one desktop notification per held call.
+const DEFS = defsByName(agentDefs({ live: false, trendsAllow: true }));   // trends is cleared only if the live config says allow
+const confirmed = new Map(), notified = new Set();
+const PUBLIC_ACTS = new Set(["x_post", "x_reply", "inbox_reply", "preorder_send_payment_link", "preorder_cancel"].map((n) => `hallucinated.${n}`));
+let ourAgents = {}, agentsAt = 0;
+async function clearHolds() {
+  if (Date.now() - agentsAt > 120_000) {
+    ourAgents = Object.fromEntries(((await v.agents.list({ limit: 100 })).data || []).filter((a) => /^hallucinated-/.test(a.name)).map((a) => [a.id, a]));
+    agentsAt = Date.now();
+  }
+  const held = (await v.sessions.list({ stop_reason: "awaiting_approval", limit: 50 })).data || [];
+  for (const s of held) {
+    const agent = ourAgents[s.agent_id];
+    if (!agent) continue;
+    for (const a of (s.pending_actions || []).filter((x) => x.kind !== "question")) {
+      const k = `${s.id}:${a.tool_call_id}:${a.parked_seq ?? ""}`;
+      // HOLDS_STRICT_PUBLIC=1: when Naïve holds a call because the chat has read people's data (read_people), leave the
+      // public-facing ones (posts, replies, customer email) for John instead of clearing them.
+      const strict = process.env.HOLDS_STRICT_PUBLIC === "1" && a.read_people && PUBLIC_ACTS.has(a.name);
+      if (!strict && autoConfirmable(DEFS, agent.name, a.name, agent.tools)) {
+        if (Date.now() - (confirmed.get(k) || 0) < 15_000) continue;
+        confirmed.set(k, Date.now());
+        await v.sessions.confirmTool(s.id, { tool_call_id: a.tool_call_id, decision: "allow", scope: "session", reason: "pre-approved tool (agent config: allow); cleared by serve" })
+          .then(() => log(`[holds] allowed held ${a.name} for ${agent.name} session ${s.id} (pre-approved tool)`))
+          .catch((e) => log(`[holds] confirmTool ${a.name} on ${s.id} failed: ${e.message}`));
+      } else if (!notified.has(k)) {
+        notified.add(k);
+        log(`[holds] WAITING FOR JOHN: ${agent.name} wants ${a.name} (session ${s.id}) ${JSON.stringify(a.args || {}).slice(0, 240)}`);
+        try { execFile("osascript", ["-e", `display notification ${JSON.stringify(`${agent.name.replace(/^hallucinated-/, "")} needs your OK in Naïve Studio: ${a.name.replace(/^hallucinated\./, "")}`)} with title "Hallucinated" sound name "Glass"`]); } catch {}
+      }
+    }
+  }
+  if (confirmed.size > 5000) confirmed.clear();
+}
+let clearing = false;
+setInterval(async () => { if (clearing) return; clearing = true; try { await clearHolds(); } catch (e) { log("[holds] " + e.message); } finally { clearing = false; } }, 10_000);
 
 const stop = () => { try { fs.unlinkSync(STATE); } catch {} try { tunnel.stop(); } catch {} server.close(); log("== serve stopped"); process.exit(0); };
 process.on("SIGINT", stop); process.on("SIGTERM", stop); process.on("SIGHUP", stop);
