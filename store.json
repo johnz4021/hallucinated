@@ -1,23 +1,158 @@
 {
   "url": "https://hallucinated-store.vercel.app",
+  "url_note": "Production serves the phase-1 single-shirt page (being switched to live mode by the lead) until the phase-2 preview is promoted.",
+  "preview_url": "https://hallucinated-store-1gakpl1wh-john-1006.vercel.app",
+  "preview_note": "Phase 2, test mode, behind Vercel Deployment Protection (log in to Vercel as john-1006 to view).",
   "mode": "test",
-  "price_id": "price_1UZH8EBnHpN1EAwPy0NcjArA",
-  "product_id": "prod_VaS2cpGf4eFESb",
-  "lookup_key": "hallucinated-drop1-tee",
-  "unit_amount": 6500,
+  "mode_note": "Everything below is the TEST catalog on acct_1UZH4hBnHpN1EAwP. Live mode gets its own IDs from `npm run setup-stripe` run with the live key.",
+  "stripe_account": "acct_1UZH4hBnHpN1EAwP",
   "currency": "usd",
-  "product": {
-    "name": "Hallucinated drop 1: git reset --hard tee",
-    "design_id": "bc1dbe9d9aae",
-    "sizes": [
-      "S",
-      "M",
-      "L",
-      "XL"
+  "fulfilment": "Pickup in SF (we'll email you when your shirt is ready)",
+  "catalog_source": {
+    "kind": "stripe",
+    "rule": "Active Products with metadata.slug and metadata.status in [live, preorder]; one Price per size with metadata.size. Site caches 60 s; POST {url}/api/revalidate (Bearer STORE_ADMIN_SECRET) refreshes now.",
+    "product_metadata": [
+      "slug",
+      "status",
+      "launch_window",
+      "drop",
+      "design_id",
+      "garment",
+      "color",
+      "category",
+      "sort"
+    ],
+    "price_metadata": [
+      "size",
+      "design_id",
+      "garment",
+      "color",
+      "drop",
+      "slug"
+    ],
+    "price_lookup_key": "<slug>-<size lowercase>",
+    "docs": "storefront/CONTENT.md"
+  },
+  "content_source": {
+    "kind": "vercel-blob",
+    "admin_api": "{url}/api/admin/content (GET, PATCH, PUT) and {url}/api/admin/upload (POST image bytes); Authorization: Bearer STORE_ADMIN_SECRET",
+    "docs": "storefront/CONTENT.md"
+  },
+  "products": [
+    {
+      "slug": "git-reset-hard-tee",
+      "status": "live",
+      "product_id": "prod_VaS2cpGf4eFESb",
+      "design_id": "bc1dbe9d9aae",
+      "garment": "tee",
+      "color": "black",
+      "drop": "drop-1",
+      "unit_amount": 6500,
+      "prices": {
+        "S": "price_1UZHYVBnHpN1EAwPLF8TKE4F",
+        "M": "price_1UZHYWBnHpN1EAwPvqFrZtZi",
+        "L": "price_1UZHYWBnHpN1EAwPybBC58k6",
+        "XL": "price_1UZHYWBnHpN1EAwPBpULKe6a"
+      }
+    },
+    {
+      "slug": "wordmark-hoodie-forest",
+      "status": "preorder",
+      "launch_window": "Dec 2026",
+      "product_id": "prod_VaSTBPTlh7jsap",
+      "drop": "drop-2",
+      "unit_amount": 9500,
+      "prices": {
+        "S": "price_1UZHYWBnHpN1EAwPQGD5CZob",
+        "M": "price_1UZHYXBnHpN1EAwPkyzR474t",
+        "L": "price_1UZHYXBnHpN1EAwPkXH5nvXL",
+        "XL": "price_1UZHYXBnHpN1EAwPszcV5rvj"
+      }
+    },
+    {
+      "slug": "wordmark-cap-black",
+      "status": "preorder",
+      "launch_window": "Dec 2026",
+      "product_id": "prod_VaSTQmmVlZkNda",
+      "drop": "drop-2",
+      "unit_amount": 4000,
+      "prices": {
+        "OS": "price_1UZHYXBnHpN1EAwP1EaiLeUV"
+      }
+    },
+    {
+      "slug": "wordmark-tote-bone",
+      "status": "preorder",
+      "launch_window": "Dec 2026",
+      "product_id": "prod_VaSTi9x9K3UIvu",
+      "drop": "drop-2",
+      "unit_amount": 3000,
+      "prices": {
+        "OS": "price_1UZHYYBnHpN1EAwPrOLKOw9h"
+      }
+    },
+    {
+      "slug": "wordmark-tee-bone",
+      "status": "preorder",
+      "launch_window": "Dec 2026",
+      "product_id": "prod_VaSTuxxmsgv4rV",
+      "drop": "drop-2",
+      "unit_amount": 6500,
+      "prices": {
+        "S": "price_1UZHYYBnHpN1EAwPqfvEaQVB",
+        "M": "price_1UZHYZBnHpN1EAwP9Zxs81xN",
+        "L": "price_1UZHYZBnHpN1EAwPuqAdfTRr",
+        "XL": "price_1UZHYZBnHpN1EAwPrePqttaq"
+      }
+    }
+  ],
+  "legacy": {
+    "price_id": "price_1UZH8EBnHpN1EAwPy0NcjArA",
+    "lookup_key": "hallucinated-drop1-tee",
+    "note": "Single drop-1 test price used by the phase-1 page and the two fixture sessions; size is in session.metadata.size. Still active; archive after promotion.",
+    "fixture_sessions": [
+      "cs_test_a1dWFKrVFld5D1mfDTH5WodKX815y7UPGgJtBbg0q0rLAzy9mB0BMxu0b6",
+      "cs_test_a1AJIT9wEDPASNKs9Z7Mxv1nbdKr59nFqRxG5gLc3PGJMnqaA9VtoccuUh"
     ]
   },
-  "max_quantity": 5,
-  "fulfilment": "Pickup in SF (we'll email you when your shirt is ready)",
-  "stripe_account": "acct_1UZH4hBnHpN1EAwP",
-  "updated_at": "2026-11-07T21:32:09.787Z"
+  "order_shape": {
+    "list": "GET /v1/checkout/sessions?status=complete (filter created[gte]); branch on metadata.kind (missing = order)",
+    "order": {
+      "mode": "payment",
+      "paid_when": "payment_status == 'paid'",
+      "metadata": {
+        "kind": "order",
+        "drop": "comma-joined drops",
+        "items": "slug:SIZExQTY;... (summary)",
+        "size": "only on single-line sessions",
+        "design_id": "only on single-line sessions"
+      },
+      "line_items": "expand line_items.data.price.product; each has quantity + price.metadata {size, design_id, garment, color, drop, slug}",
+      "customer": "customer_details.email / .name",
+      "also": [
+        "created",
+        "amount_total",
+        "payment_intent (same metadata)",
+        "invoice"
+      ]
+    },
+    "preorder": {
+      "mode": "setup",
+      "metadata": {
+        "kind": "preorder",
+        "preorder_items": "JSON [{price_id, qty}]",
+        "preorder_total": "cents to charge at launch",
+        "currency": "usd",
+        "launch_window": "e.g. Dec 2026",
+        "drop": "drop-2",
+        "items": "summary"
+      },
+      "customer": "session.customer (always created) + customer_details.email / .name",
+      "saved_card": "session.setup_intent -> payment_method (attached to the customer, usage off_session)",
+      "charge_at_launch": "agents only, behind an ask-permission tool: PaymentIntent {customer, payment_method, amount: preorder_total, currency, off_session: true, confirm: true}. The site has no charge endpoint."
+    },
+    "drop_alerts": "Stripe Customers with metadata.drop_alerts = 'yes'",
+    "mixed_carts": "not allowed: each session is exactly one kind"
+  },
+  "updated_at": "2026-11-07T22:09:06.123Z"
 }

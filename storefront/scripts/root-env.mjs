@@ -19,6 +19,18 @@ export function readRootEnv(file = path.join(ROOT, ".env")) {
   return out;
 }
 
+// Looks a variable up in process.env, then ../.env, then storefront/.env.admin, then storefront/.env.local
+// (Vercel's pulled dev vars, e.g. BLOB_READ_WRITE_TOKEN). Never prints values.
+export function envVar(name) {
+  return (
+    process.env[name] ||
+    readRootEnv()[name] ||
+    readRootEnv(path.join(STOREFRONT, ".env.admin"))[name] ||
+    readRootEnv(path.join(STOREFRONT, ".env.local"))[name] ||
+    undefined
+  );
+}
+
 // Returns the Stripe secret key, refusing anything but a test key unless allowLive.
 export function stripeKey({ allowLive = process.env.ALLOW_LIVE_STRIPE === "1" } = {}) {
   const key = process.env.STRIPE_SECRET_KEY || readRootEnv().STRIPE_SECRET_KEY;

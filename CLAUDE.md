@@ -16,11 +16,20 @@ A streetwear brand on SF tech humor, run by Naïve agents (`@usenaive-sdk/vetta`
 - Research: Naïve `socialData` works for Reddit/Threads/TikTok/HN (~$0.001/call). Its X tools are listed but return 404. X search through our own keys **works** (Sat 13:11, 10 real posts): MCP tool `x_search` (read-only) for Growth's scout queue and for reading replies to our posts.
 - Parked: X Ads (permission form pending), Naïve card issuing (not configured on the account), so **a human pays for everything**.
 
-## Next: close the loop
-0. **Live by 6:45 pm today:** order ledger (seed CF5A93CRK) + email-triggered pickup (John relays Customania's "pick up by 7:30, close at 8" to hallucinated@agentmail.to → inbox agent marks it ready → Ops books an Uber Courier ~7:00 pm from John's phone with his OK) + a 7:00 pm daily schedule as backstop. Details in HANDOFF.md (Subagent B). (run as two parallel subagents, briefs in HANDOFF.md)
-1. **Storefront** (Subagent A): one-page store on Vercel + real Stripe Checkout (test mode until John says live). Writes `store.json` (URL + price ID).
-2. **Agents** (Subagent B): Growth (reply-bait posts + one auto-reply per person who replies/mentions us, scheduled posts, scout queue John approves, all via `x_post`), inbox agent on AgentMail (`hallucinated@agentmail.to`), `stripe_orders` → Ops batches paid orders into a Customania order with the human-pay handoff, `ready for pickup` email → `courier_quote` → `courier_book` (John approves), trends tool on Naïve socialData for Product.
-3. Last, only if time: a dashboard. Naïve Studio already shows chats, tool calls and approvals.
+## Status (Sat 14:10)
+- **Storefront live, Stripe TEST mode:** https://hallucinated-store.vercel.app (Vercel team `john-1006`, Hobby). Phase 1 = one-page drop-1 store, $65, S–XL, SF pickup (price and copy final per John). Stripe account is a **sandbox** (`acct_1UZH4h…`, "Hallucinated Goods sandbox"); key in `.env` as `STRIPE_SECRET_KEY`. The Stripe CLI is logged in to a *different* account; never rely on it.
+- **Phase 2 storefront in progress (preview only):** catalog = Stripe Products/Prices (per-size Prices with metadata), banners/lookbook on Vercel Blob with an admin API, cart, AI lookbook imagery, **pre-orders** (Checkout setup mode: card saved, charged at launch by the agents' `charge_preorders`, ask). Contract: `store.json` (`order_shape`, `catalog_source`) and `storefront/CONTENT.md`. Production stays phase 1 until reviewed.
+- **Agents built** (`design-mcp/agents/defs.mjs` is the single source of truth: every tool named per agent; unnamed tools would default to enabled+allow in Naïve). `setup_agents.mjs` is idempotent and creates the deployments **paused**: growth (every 3 h), support (15 min), ops-sales (hourly). Enable with `enable_schedules.command`. `serve.mjs` clears Naïve's spurious holds only for tools that are `allow` in defs AND the live config; `NEVER_AUTO` tools (handoff, courier_book, charge_preorders, x_post_scout, ads, cards) always wait for John.
+- **Sales e2e passed up to payment (14:05):** 2 Stripe test orders → `sales_run.mjs --human-pay` → Ops batch lock → Customania cart verified (M1 L2, $153.16) → handoff card; denied on purpose, batch aborted, test orders still unbatched.
+- Dry-run switches: `X_DRY_RUN=1`, `MAIL_DRY_RUN=1` (env on serve). `STRIPE_LIVE_OK=1` must be in serve's *process* env (not `.env`) for live Stripe keys.
+- Unknown: whether the AgentMail key can send mail (never tested).
+
+## Next
+1. **Stripe live, then Growth live** (John's order). John: activate payments on a real (non-sandbox) Stripe account, add `STRIPE_LIVE_SECRET_KEY` to `.env`, decide Vercel Pro and Stripe Tax. Lead: live key on Vercel prod only, run phase-1 `setup-stripe` from commit `111328a` (the working tree is phase 2), redeploy current prod (`vercel redeploy`, not a fresh deploy of the working tree), one real purchase check, `store.json` mode live, restart serve with `STRIPE_LIVE_OK=1`. Then enable the growth deployment and fire one run.
+2. Review and promote phase-2 storefront; wire Growth/Product to publish banners via the content admin API.
+3. Later (John): sales batching once a day: `ops-sales` cron `"40 * * * *"` → `"0 21 * * *"` in `defs.mjs` plus `SALES_MIN_QTY=1`.
+4. Dropped for now (John, 14:07): order ledger + 7 pm courier pickup run. Parked code: session scratchpad `parked-pickup/` (not in repo). Customania automation stays as is.
+5. Last, only if time: a dashboard. Naïve Studio already shows chats, tool calls and approvals.
 
 ## Repo layout
 ```

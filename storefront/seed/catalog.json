@@ -1,0 +1,144 @@
+{
+  "_comment": "Seed for scripts/setup-stripe.mjs (idempotent). Stripe is the live catalog; agents add products straight in Stripe (see CONTENT.md).",
+  "products": [
+    {
+      "slug": "git-reset-hard-tee",
+      "name": "git reset --hard tee",
+      "status": "live",
+      "drop": "drop-1",
+      "design_id": "bc1dbe9d9aae",
+      "garment": "tee",
+      "color": "black",
+      "category": "tees",
+      "sort": 1,
+      "description": "Black tee. Hallucinated wordmark across the chest. On the back, a line-art map of San Francisco under the one command that never asks if you're sure.",
+      "features": [
+        "Black tee",
+        "Front: Hallucinated wordmark, 10 in wide",
+        "Back: > git reset --hard over a line-art map of SF",
+        "Printed in San Francisco"
+      ],
+      "images": [
+        "https://x2ww2cgnt2vbaqob.public.blob.vercel-storage.com/media/v2/tee-back.jpg",
+        "https://x2ww2cgnt2vbaqob.public.blob.vercel-storage.com/media/v2/tee-front.jpg",
+        "https://x2ww2cgnt2vbaqob.public.blob.vercel-storage.com/media/v1/lb-back-detail.jpg",
+        "https://x2ww2cgnt2vbaqob.public.blob.vercel-storage.com/media/v1/lb-front-wall.jpg",
+        "https://x2ww2cgnt2vbaqob.public.blob.vercel-storage.com/media/v1/lb-back-street.jpg",
+        "https://x2ww2cgnt2vbaqob.public.blob.vercel-storage.com/media/v1/lb-front-woman.jpg"
+      ],
+      "sizes": [
+        "S",
+        "M",
+        "L",
+        "XL"
+      ],
+      "unit_amount": 6500,
+      "legacy_lookup_key": "hallucinated-drop1-tee"
+    },
+    {
+      "slug": "wordmark-hoodie-forest",
+      "name": "Wordmark hoodie, forest",
+      "status": "preorder",
+      "launch_window": "Dec 2026",
+      "drop": "drop-2",
+      "design_id": "logo-bone-on-forest-sand",
+      "garment": "hoodie",
+      "color": "forest",
+      "category": "hoodies",
+      "sort": 10,
+      "description": "Pullover hoodie in forest green with the Hallucinated wordmark across the chest in bone, sand ghost behind it.",
+      "features": [
+        "Forest green pullover hoodie",
+        "Front: Hallucinated wordmark, bone with a sand ghost",
+        "Kangaroo pocket"
+      ],
+      "images": [
+        "https://x2ww2cgnt2vbaqob.public.blob.vercel-storage.com/media/v1/pre-hoodie.jpg"
+      ],
+      "sizes": [
+        "S",
+        "M",
+        "L",
+        "XL"
+      ],
+      "unit_amount": 9500
+    },
+    {
+      "slug": "wordmark-cap-black",
+      "name": "Wordmark cap",
+      "status": "preorder",
+      "launch_window": "Dec 2026",
+      "drop": "drop-2",
+      "design_id": "logo-black-tee",
+      "garment": "cap",
+      "color": "black",
+      "category": "headwear",
+      "sort": 11,
+      "description": "Black six-panel unstructured cap with the wordmark embroidered small on the front.",
+      "features": [
+        "Black six-panel unstructured cap",
+        "Embroidered wordmark",
+        "One size, adjustable strap"
+      ],
+      "images": [
+        "https://x2ww2cgnt2vbaqob.public.blob.vercel-storage.com/media/v1/pre-cap.jpg"
+      ],
+      "sizes": [
+        "OS"
+      ],
+      "unit_amount": 4000
+    },
+    {
+      "slug": "wordmark-tote-bone",
+      "name": "Wordmark tote",
+      "status": "preorder",
+      "launch_window": "Dec 2026",
+      "drop": "drop-2",
+      "design_id": "logo-forest-on-bone-sand",
+      "garment": "tote",
+      "color": "bone",
+      "category": "accessories",
+      "sort": 12,
+      "description": "Heavy natural canvas tote with the wordmark in forest green. Holds a laptop, a charger and your excuses.",
+      "features": [
+        "Natural canvas tote",
+        "Front: wordmark in forest green with a sand ghost",
+        "One size"
+      ],
+      "images": [
+        "https://x2ww2cgnt2vbaqob.public.blob.vercel-storage.com/media/v1/pre-tote.jpg"
+      ],
+      "sizes": [
+        "OS"
+      ],
+      "unit_amount": 3000
+    },
+    {
+      "slug": "wordmark-tee-bone",
+      "name": "Wordmark tee, bone",
+      "status": "preorder",
+      "launch_window": "Dec 2026",
+      "drop": "drop-2",
+      "design_id": "logo-light-tee",
+      "garment": "tee",
+      "color": "bone",
+      "category": "tees",
+      "sort": 13,
+      "description": "Bone tee with the wordmark across the chest in near-black, eucalyptus ghost behind it. The quiet one.",
+      "features": [
+        "Bone tee",
+        "Front: Hallucinated wordmark, near-black with a eucalyptus ghost"
+      ],
+      "images": [
+        "https://x2ww2cgnt2vbaqob.public.blob.vercel-storage.com/media/v1/pre-bone-tee.jpg"
+      ],
+      "sizes": [
+        "S",
+        "M",
+        "L",
+        "XL"
+      ],
+      "unit_amount": 6500
+    }
+  ]
+}

@@ -8,10 +8,12 @@
     "build": "next build",
     "start": "node scripts/with-root-env.mjs next start",
     "setup-stripe": "node scripts/setup-stripe.mjs",
-    "push-env": "node scripts/push-vercel-env.mjs",
-    "test:checkout": "node scripts/test-checkout.mjs"
+    "push-env": "node scripts/push-vercel-env.mjs --env preview",
+    "test:checkout": "node scripts/test-checkout.mjs",
+    "build:local": "node scripts/with-root-env.mjs next build"
   },
   "dependencies": {
+    "@vercel/blob": "^2.8.2",
     "next": "^16.4.5",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",

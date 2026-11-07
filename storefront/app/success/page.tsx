@@ -1,61 +1,76 @@
 import type { Metadata } from "next";
-import { config, formatPrice } from "@/lib/config";
+import Link from "next/link";
+import type Stripe from "stripe";
+import ClearCart from "@/components/ClearCart";
+import { config, formatPrice, sentence } from "@/lib/config";
 import { getStripe } from "@/lib/stripe";
-import Masthead from "../Masthead";
-
-const sentence = (t: string) => (/[.!?]$/.test(t) ? t : `${t}.`);
 
 export const dynamic = "force-dynamic";
-export const metadata: Metadata = { title: "Order in. Hallucinated", robots: { index: false } };
+export const metadata: Metadata = { title: "Thanks", robots: { index: false } };
 
-async function loadOrder(id: string | undefined) {
+type View =
+  | { kind: "order"; name: string | null; email: string | null; total: number; currency: string; lines: string[] }
+  | { kind: "preorder"; name: string | null; email: string | null; total: number; window: string; lines: string[] };
+
+async function load(id?: string): Promise<View | null> {
   if (!id || !/^cs_(test|live)_[A-Za-z0-9]+$/.test(id)) return null;
   try {
-    const s = await getStripe().checkout.sessions.retrieve(id, { expand: ["line_items"] });
-    if (s.payment_status !== "paid") return null;
-    return {
-      size: s.metadata?.size ?? "?",
-      qty: s.line_items?.data[0]?.quantity ?? 1,
-      total: s.amount_total ?? 0,
-      currency: s.currency ?? config.currency,
-      email: s.customer_details?.email ?? null,
-      name: s.customer_details?.name ?? null,
-    };
-  } catch {
-    return null;
-  }
+    const stripe = getStripe();
+    const s = await stripe.checkout.sessions.retrieve(id, { expand: ["line_items.data.price.product"] });
+    const name = s.customer_details?.name ?? null;
+    const email = s.customer_details?.email ?? null;
+    if (s.mode === "setup" && s.status === "complete") {
+      const items = JSON.parse(s.metadata?.preorder_items ?? "[]") as { price_id: string; qty: number }[];
+      const lines = await Promise.all(
+        items.map(async (it) => {
+          const p = await stripe.prices.retrieve(it.price_id, { expand: ["product"] });
+          return `${it.qty} × ${(p.product as Stripe.Product).name}, ${p.metadata.size === "OS" ? "one size" : `size ${p.metadata.size}`}`;
+        }),
+      );
+      return { kind: "preorder", name, email, total: Number(s.metadata?.preorder_total ?? 0), window: s.metadata?.launch_window ?? "", lines };
+    }
+    if (s.mode === "payment" && s.payment_status === "paid") {
+      const lines = (s.line_items?.data ?? []).map((li) => {
+        const pr = li.price as Stripe.Price | null;
+        const size = pr?.metadata?.size ?? s.metadata?.size ?? "";
+        return `${li.quantity} × ${(pr?.product as Stripe.Product | undefined)?.name ?? li.description}${size ? `, size ${size}` : ""}`;
+      });
+      return { kind: "order", name, email, total: s.amount_total ?? 0, currency: s.currency ?? config.currency, lines };
+    }
+  } catch {}
+  return null;
 }
 
 export default async function Success({ searchParams }: { searchParams: Promise<{ session_id?: string }> }) {
-  const { session_id } = await searchParams;
-  const order = await loadOrder(session_id);
+  const v = await load((await searchParams).session_id);
+  const first = v?.name?.split(" ")[0];
   return (
-    <>
-      <Masthead />
-      <main className="note-page">
-        <h1 className="title">
-          <span className="prompt" aria-hidden="true">&gt;</span> git commit -m &quot;bought the shirt&quot;
-        </h1>
-        {order ? (
-          <>
-            <p className="note-lead">
-              {order.name ? `Thanks, ${order.name.split(" ")[0]}. ` : "Thanks. "}
-              {order.qty} &times; size {order.size}, {formatPrice(order.total, order.currency)} paid.
-            </p>
+    <div className="wrap page note-page">
+      <ClearCart />
+      <h1 className="mono-title">
+        <span className="prompt" aria-hidden="true">&gt;</span> {v?.kind === "preorder" ? "git stash save \"pre-order\"" : "git commit -m \"bought the shirt\""}
+      </h1>
+      {v ? (
+        <>
+          <p className="note-lead">{first ? `Thanks, ${first}.` : "Thanks."} {v.kind === "preorder" ? "Your pre-order is in." : "Your order is in."}</p>
+          <ul className="note-lines">{v.lines.map((l) => <li key={l}>{l}</li>)}</ul>
+          {v.kind === "preorder" ? (
             <p>
-              {sentence(config.fulfilment)}
-              {order.email ? ` The receipt and updates go to ${order.email}.` : ""}
+              Nothing was charged today. We&rsquo;ll charge {formatPrice(v.total)} to the card you saved when the drop launches
+              {v.window ? ` (est. ${v.window})` : ""}. If it never launches, you&rsquo;re never charged. To cancel, email {config.contactEmail}.
             </p>
-          </>
-        ) : (
-          <p className="note-lead">Payment received. {sentence(config.fulfilment)}</p>
-        )}
-        <p>
-          The ops agent batches paid orders into the next print run. You can watch it happen at{" "}
-          <a href={config.xUrl}>{config.xHandle}</a>.
-        </p>
-        <p><a href="/" className="back-link">Back to the shop</a></p>
-      </main>
-    </>
+          ) : (
+            <p>{formatPrice(v.total, v.currency)} paid. {sentence(config.fulfilment)}</p>
+          )}
+          {v.email && <p>Updates go to {v.email}.</p>}
+        </>
+      ) : (
+        <p className="note-lead">Thanks. {sentence(config.fulfilment)}</p>
+      )}
+      <p>
+        The ops agent batches orders into the next print run. Watch it happen at <a href={config.xUrl}>{config.xHandle}</a>.
+      </p>
+      <p><Link href="/shop" className="section-link">Keep shopping</Link></p>
+    </div>
   );
 }

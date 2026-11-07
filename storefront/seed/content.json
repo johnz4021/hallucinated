@@ -1,0 +1,116 @@
+{
+  "version": 1,
+  "updated_at": "2026-11-07T21:53:32.398Z",
+  "announcement": "Drop 1 is live, pickup in SF. Drop 2 is taking pre-orders.",
+  "banners": [
+    {
+      "id": "drop-1-fog",
+      "title": "git reset --hard",
+      "subtitle": "Drop 1. A black tee for the moment you stop negotiating with the branch.",
+      "image": "https://x2ww2cgnt2vbaqob.public.blob.vercel-storage.com/media/v1/banner-fog.jpg",
+      "image_alt": "Someone seen from behind on a foggy San Francisco hill street, wearing the black git reset --hard tee",
+      "cta_label": "Shop drop 1",
+      "cta_href": "/p/git-reset-hard-tee",
+      "focus": "right",
+      "sort": 1
+    },
+    {
+      "id": "agents-steps",
+      "title": "Designed by agents. Worn by people.",
+      "subtitle": "Every piece is designed, approved and ordered by AI agents. A human still does the paying.",
+      "image": "https://x2ww2cgnt2vbaqob.public.blob.vercel-storage.com/media/v1/banner-steps.jpg",
+      "image_alt": "Someone sitting on concrete steps wearing the black tee with the hallucinated wordmark on the chest",
+      "cta_label": "How it works",
+      "cta_href": "/info#agents",
+      "focus": "right",
+      "sort": 2
+    },
+    {
+      "id": "drop-2-preorder",
+      "title": "Drop 2 is in pre-order",
+      "subtitle": "Hoodie, cap, tote and a bone tee. We save your card now and charge it when the drop launches.",
+      "image": "https://x2ww2cgnt2vbaqob.public.blob.vercel-storage.com/media/v1/banner-flatlay.jpg",
+      "image_alt": "The black git reset --hard tee laid flat on concrete next to a closed laptop, keys and a coffee",
+      "cta_label": "See drop 2",
+      "cta_href": "/drops/2",
+      "focus": "right",
+      "sort": 3
+    }
+  ],
+  "lookbook": [
+    {
+      "id": "lb-back-detail",
+      "image": "https://x2ww2cgnt2vbaqob.public.blob.vercel-storage.com/media/v1/lb-back-detail.jpg",
+      "alt": "Close-up of the back print: > git reset --hard over a line-art map of SF",
+      "caption": "Back, close",
+      "product_slug": "git-reset-hard-tee",
+      "drop": "drop-1",
+      "sort": 1
+    },
+    {
+      "id": "lb-front-woman",
+      "image": "https://x2ww2cgnt2vbaqob.public.blob.vercel-storage.com/media/v1/lb-front-woman.jpg",
+      "alt": "Someone on a sunny sidewalk wearing the black tee with the wordmark, holding a mug",
+      "caption": "Front, oversized",
+      "product_slug": "git-reset-hard-tee",
+      "drop": "drop-1",
+      "sort": 2
+    },
+    {
+      "id": "lb-back-street",
+      "image": "https://x2ww2cgnt2vbaqob.public.blob.vercel-storage.com/media/v1/lb-back-street.jpg",
+      "alt": "Someone walking away down a steep street, back print visible",
+      "caption": "Back, downhill",
+      "product_slug": "git-reset-hard-tee",
+      "drop": "drop-1",
+      "sort": 3
+    },
+    {
+      "id": "lb-front-wall",
+      "image": "https://x2ww2cgnt2vbaqob.public.blob.vercel-storage.com/media/v1/lb-front-wall.jpg",
+      "alt": "Someone leaning on a pale wall in late sun, wordmark on the chest",
+      "caption": "Front, late sun",
+      "product_slug": "git-reset-hard-tee",
+      "drop": "drop-1",
+      "sort": 4
+    },
+    {
+      "id": "lb-front-rooftop",
+      "image": "https://x2ww2cgnt2vbaqob.public.blob.vercel-storage.com/media/v1/lb-front-rooftop.jpg",
+      "alt": "Someone sitting on a rooftop ledge at golden hour wearing the black tee",
+      "caption": "Front, after the deploy",
+      "product_slug": "git-reset-hard-tee",
+      "drop": "drop-1",
+      "sort": 5
+    },
+    {
+      "id": "lb-flatlay",
+      "image": "https://x2ww2cgnt2vbaqob.public.blob.vercel-storage.com/media/v1/banner-flatlay.jpg",
+      "alt": "The tee laid flat, back up, next to a closed laptop and keys",
+      "caption": "Flat, back up",
+      "product_slug": "git-reset-hard-tee",
+      "drop": "drop-1",
+      "sort": 6
+    }
+  ],
+  "drops": [
+    {
+      "id": "drop-1",
+      "n": 1,
+      "title": "git reset --hard",
+      "tagline": "The first one.",
+      "description": "A black tee: the Hallucinated wordmark on the chest, > git reset --hard over a line-art map of SF on the back. The product agent designed it, the CEO agent approved it and the ops agent ordered it on 7 Nov 2026.",
+      "status": "live",
+      "image": "https://x2ww2cgnt2vbaqob.public.blob.vercel-storage.com/media/v1/banner-fog.jpg"
+    },
+    {
+      "id": "drop-2",
+      "n": 2,
+      "title": "Wordmark",
+      "tagline": "The basics, done by agents.",
+      "description": "The wordmark on a forest hoodie, a black cap, a canvas tote and a bone tee. Pre-order now: we save your card and charge it when the drop launches. If it never launches, you're never charged.",
+      "status": "preorder",
+      "image": "https://x2ww2cgnt2vbaqob.public.blob.vercel-storage.com/media/v1/pre-hoodie.jpg"
+    }
+  ]
+}

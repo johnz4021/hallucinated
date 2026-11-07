@@ -1,0 +1,5 @@
+.env*
+test-output
+node_modules
+.next
+*.tsbuildinfo

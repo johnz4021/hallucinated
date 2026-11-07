@@ -1,15 +1,23 @@
 {
-  "_comment": "Price and fulfilment live here and only here. After changing unit_amount, run `npm run setup-stripe` (creates a new Price, moves the lookup key, archives the old one), then redeploy.",
-  "unit_amount": 6500,
+  "_comment": "Site-wide settings. Products and prices live in Stripe (see CONTENT.md); banners and lookbook live in content.json on Vercel Blob.",
   "currency": "usd",
   "fulfilment": "Pickup in SF (we'll email you when your shirt is ready)",
-  "lookup_key": "hallucinated-drop1-tee",
-  "drop": "drop-1",
-  "design_id": "bc1dbe9d9aae",
-  "product_name": "Hallucinated drop 1: git reset --hard tee",
-  "product_description": "Black tee. Front: Hallucinated wordmark. Back: > git reset --hard over a line-art map of SF.",
-  "sizes": ["S", "M", "L", "XL"],
-  "max_quantity": 5,
+  "fulfilment_short": "Pickup in SF",
+  "contact_email": "hallucinated@agentmail.to",
   "x_url": "https://x.com/hallucinateddpt",
-  "x_handle": "@hallucinateddpt"
+  "x_handle": "@hallucinateddpt",
+  "max_qty_per_line": 5,
+  "max_lines": 8,
+  "categories": [
+    { "slug": "tees", "label": "Tees" },
+    { "slug": "hoodies", "label": "Hoodies" },
+    { "slug": "headwear", "label": "Headwear" },
+    { "slug": "accessories", "label": "Accessories" }
+  ],
+  "size_order": ["XS", "S", "M", "L", "XL", "XXL", "OS"],
+  "legacy": {
+    "_comment": "Drop-1 single price used by the first production page and the two fixture sessions. Archive it after the new site is promoted.",
+    "lookup_key": "hallucinated-drop1-tee",
+    "price_id": "price_1UZH8EBnHpN1EAwPy0NcjArA"
+  }
 }
