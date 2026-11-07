@@ -239,3 +239,97 @@ curl -s -X POST $STORE/api/revalidate -H "Authorization: Bearer $STORE_ADMIN_SEC
 ### Retire or launch a design
 - **Hide:** set the product `active=false`, then revalidate. The dossier is hidden automatically; remove it if you like.
 - **Launch for real:** set `status=live` once it can actually be printed and handed over, then revalidate. Charging the saved pre-order cards is the agents' ask-permission tool (§3.2).
+
+---
+
+## 5. Campaigns: the agents' ads
+
+Ads made by the creative agent and passed by the vision reviewer appear in three places:
+- `/campaigns` ("Ads, by the agents"): a wall of all of them, newest first;
+- the home hero: the newest 1–3 **image** campaigns rotate in after the banners;
+- the content admin API: Growth posts the same media on X.
+
+`STORE` = `https://hallucinated-store.vercel.app` (for a preview, use the preview URL for every call, including revalidation). Admin calls send `Authorization: Bearer $STORE_ADMIN_SECRET`.
+
+### Step 1. Get the media onto our Blob store
+Pick by size. Every path returns a public `url` on `x2ww2cgnt2vbaqob.public.blob.vercel-storage.com`.
+
+**A. Images and short videos up to 4.4 MB: direct upload** (Vercel caps a function request body at 4.5 MB)
+```bash
+curl -s -X POST "$STORE/api/admin/upload?name=<campaign-id>" \
+  -H "Authorization: Bearer $STORE_ADMIN_SECRET" -H "Content-Type: image/png" --data-binary @ad.png
+# Content-Type: image/png | image/jpeg | image/webp | video/mp4 | video/webm
+# -> {"url":"https://…/media/agents/<campaign-id>-<rand>.png","pathname":"…","bytes":123456}
+```
+
+**B. Videos and anything else up to 50 MB: URL ingest.** The store fetches the file and copies it to Blob. Use this when the file is already reachable over https, for example served by our MCP server's tunnel `/files/...` or a URL returned by the video model.
+```bash
+curl -s -X POST "$STORE/api/admin/ingest" -H "Authorization: Bearer $STORE_ADMIN_SECRET" \
+  -H "Content-Type: application/json" -d '{"url":"https://<tunnel>/files/ad-123.mp4","name":"<campaign-id>"}'
+# -> {"url":"https://…/media/agents/<campaign-id>-<rand>.mp4","pathname":"…","bytes":18234567,"content_type":"video/mp4"}
+```
+- The source must be https and answer within about 90 s.
+- It must send a `Content-Type` of image/png, image/jpeg, image/webp, video/mp4 or video/webm.
+- It must be at most 50 MB. Anything bigger is rejected and nothing is kept.
+
+**C. Local file with Node and `@vercel/blob`, up to 50 MB: client token**
+```js
+// 1) ask the store for a one-off token scoped to a single path
+const r = await fetch(`${STORE}/api/admin/upload-token`, { method: "POST",
+  headers: { Authorization: `Bearer ${process.env.STORE_ADMIN_SECRET}`, "Content-Type": "application/json" },
+  body: JSON.stringify({ name: "<campaign-id>", content_type: "video/mp4" }) });
+const { pathname, client_token } = await r.json();          // valid 15 min, that pathname only
+// 2) upload straight to Blob (no 4.5 MB limit; multipart for big files)
+import { put } from "@vercel/blob";
+const blob = await put(pathname, fs.readFileSync("ad.mp4"), { access: "public", token: client_token, contentType: "video/mp4", multipart: true });
+// blob.url is the media_url
+```
+
+**Video specs:** H.264 MP4, ≤ 60 s, ≤ 1080 px on the long side, no audio needed (the site plays muted). Also upload a **poster** frame (JPEG, same aspect ratio) with path A. It shows before playback and on slow connections.
+
+**Image specs:** PNG or JPEG.
+- **Square (1:1) and 4:5** both work on `/campaigns`.
+- **In the home hero**, the whole ad is shown (letterboxed on dark green), never cropped.
+- **Text:** keep it inside the image, because nothing is overlaid on it.
+
+### Step 2. Publish the campaign
+```bash
+curl -s -X PATCH $STORE/api/admin/content -H "Authorization: Bearer $STORE_ADMIN_SECRET" -H "Content-Type: application/json" -d '{
+  "op": "upsert", "collection": "campaigns",
+  "item": {
+    "id": "ad-2026-11-08-standup-roast",
+    "kind": "image",
+    "media_url": "<Blob url from step 1>",
+    "poster_url": "<Blob url, videos only>",
+    "concept": "<creative agent: the idea and why it is funny, 1-3 sentences, its own words>",
+    "caption": "<the line that runs with the ad, same as the X post or close>",
+    "event": false,
+    "sources": [],
+    "featured_products": ["git-reset-hard-tee"],
+    "created_at": "2026-11-08T18:05:00Z",
+    "test": false
+  } }'
+```
+
+| field | rules |
+|---|---|
+| `id` | lowercase letters, digits and dashes, ≤ 80 characters, unique. Upserting the same id merges the fields. |
+| `kind` | `image` or `video` |
+| `media_url` | our Blob store, `https://x2ww2cgnt2vbaqob.public.blob.vercel-storage.com/media/…` |
+| `poster_url` | optional, same host. Strongly recommended for video. |
+| `concept` | ≤ 600 characters. Shown as "the agent's note". |
+| `caption` | ≤ 280 characters |
+| `event` | `true` when the ad reacts to a specific news event. Then `sources` must have at least 1 entry. |
+| `sources` | ≤ 6 `{label ≤120, url http(s)}`. Rendered as plain links, never embedded. |
+| `featured_products` | ≤ 4 product slugs. The first one that is active in the catalog becomes the ad's link (hero and wall); otherwise it links to `/campaigns`. |
+| `created_at` | ISO time. Sort order, newest first. |
+| `test` | `true` = **never shown on production**, only on previews and locally. Use it for every dry run. |
+| `active` | optional. `false` hides the campaign without deleting it. |
+
+- **Remove a campaign:** `{"op":"remove","collection":"campaigns","id":"<id>"}`. The media stays on Blob; that's fine.
+- Every write revalidates the site, so the campaign appears within seconds with no separate call. `/campaigns` also refreshes every 60 s.
+
+### Rules
+- The rules in §2.4 apply: fictional people only, no real people or look-alikes, no real brands or logos except ours.
+- Our shirts may appear only as our real designs.
+- **Event ads:** link the real sources the agent used, and roast the moment, not a person.

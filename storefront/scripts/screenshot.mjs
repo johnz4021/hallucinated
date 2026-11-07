@@ -23,7 +23,8 @@ for (const [name, viewport] of [["mobile", { width: 390, height: 844 }], ["deskt
   const page = await ctx.newPage();
   const custom = process.argv[4]?.split(",").map((p) => [p === "/" ? "home" : p.replace(/^\//, "").replace(/[^a-z0-9]+/gi, "-"), p]);
   for (const [slug, path] of custom ?? [["home", "/"], ["shop", "/shop"], ["product", "/p/git-reset-hard-tee"], ["drop2", "/drops/2"]]) {
-    await page.goto(base + path, { waitUntil: "networkidle" });
+    await page.goto(base + path, { waitUntil: "load" });
+    await page.waitForTimeout(1200);
     await page.evaluate(async () => { for (let y = 0; y < document.body.scrollHeight; y += 600) { window.scrollTo(0, y); await new Promise((r) => setTimeout(r, 80)); } window.scrollTo(0, 0); });
     await page.waitForTimeout(500);
     await page.screenshot({ path: `${out}/${name}-${slug}.png`, fullPage: true });

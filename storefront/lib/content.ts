@@ -8,7 +8,7 @@ import type { Content } from "./content-schema";
 export const CONTENT_PREFIX = "content/v/";
 const KEEP = 20;
 
-const EMPTY: Content = { version: 1, updated_at: "1970-01-01T00:00:00.000Z", banners: [], lookbook: [], drops: [], designs: [] };
+const EMPTY: Content = { version: 1, updated_at: "1970-01-01T00:00:00.000Z", banners: [], lookbook: [], drops: [], designs: [], campaigns: [] };
 
 export class ContentConflict extends Error {}
 
@@ -55,9 +55,18 @@ export const getContent = unstable_cache(
       return EMPTY;
     }
   },
-  ["content-v3"],
+  ["content-v4"],
   { revalidate: 3600, tags: ["content"] },
 );
 
 export const activeSorted = <T extends { active?: boolean; sort?: number }>(xs: T[]) =>
   xs.filter((x) => x.active !== false).sort((a, b) => (a.sort ?? 100) - (b.sort ?? 100));
+
+// Campaigns marked test: true never show on production; previews and local dev show them.
+export const showTestContent = () => process.env.VERCEL_ENV !== "production";
+export function visibleCampaigns(c: Content) {
+  const tests = showTestContent();
+  return (c.campaigns ?? [])
+    .filter((x) => x.active !== false && (tests || !x.test))
+    .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
+}

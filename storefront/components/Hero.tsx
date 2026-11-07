@@ -32,16 +32,17 @@ export default function Hero({ banners }: { banners: Banner[] }) {
       {banners.map((b, n) => (
         <div
           key={b.id}
-          className={`hero-slide focus-${b.focus ?? "right"} ${n === i ? "is-on" : ""}`}
+          className={`hero-slide focus-${b.focus ?? "right"} fit-${b.fit ?? "cover"} ${n === i ? "is-on" : ""}`}
           aria-roledescription="slide"
           aria-label={`${n + 1} of ${banners.length}`}
           aria-hidden={n !== i}
         >
           <div className="hero-img">
-            <Image src={b.image} alt={b.image_alt} fill priority={n === 0} sizes="100vw" />
+            <Image src={b.image} alt={b.image_alt} fill priority={n === 0} sizes={b.fit === "contain" ? "(max-width: 700px) 100vw, 60vw" : "100vw"} />
           </div>
           <div className="hero-copy">
-            <h2 className="hero-title">{b.title}</h2>
+            {b.kicker && <p className="hero-kicker">{b.kicker}</p>}
+            <h2 className={`hero-title${b.title.length > 40 ? " long" : ""}`}>{b.title}</h2>
             {b.subtitle && <p className="hero-sub">{b.subtitle}</p>}
             {b.cta_href && (
               <Link href={b.cta_href} className="btn" tabIndex={n === i ? 0 : -1}>

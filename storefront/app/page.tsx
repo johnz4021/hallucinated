@@ -5,7 +5,8 @@ import Hero from "@/components/Hero";
 import ProductCard from "@/components/ProductCard";
 import { getCatalog, isAgentDesign } from "@/lib/catalog";
 import { config, formatPrice } from "@/lib/config";
-import { activeSorted, getContent } from "@/lib/content";
+import { activeSorted, getContent, visibleCampaigns } from "@/lib/content";
+import type { Banner } from "@/lib/content-schema";
 
 export const revalidate = 60;
 
@@ -18,7 +19,26 @@ const LOG = [
 
 export default async function Home() {
   const [catalog, content] = await Promise.all([getCatalog(), getContent()]);
-  const banners = activeSorted(content.banners).slice(0, 3);
+  const live = new Set(catalog.map((p) => p.slug));
+  // Newest 1-3 campaign images join the rotation after the curated banners (test ones only off production).
+  const adSlides: Banner[] = visibleCampaigns(content)
+    .filter((c) => c.kind === "image")
+    .slice(0, 3)
+    .map((c) => {
+      const slug = c.featured_products.find((s) => live.has(s));
+      return {
+        id: `ad-${c.id}`,
+        title: c.caption,
+        image: c.media_url,
+        image_alt: `Ad by the agents: ${c.caption}`,
+        cta_label: slug ? "Shop the shirt" : "See all the ads",
+        cta_href: slug ? `/p/${slug}` : "/campaigns",
+        focus: "right",
+        fit: "contain",
+        kicker: c.test ? "Ad by the agents (test)" : "Ad by the agents",
+      };
+    });
+  const banners = [...activeSorted(content.banners).slice(0, 3), ...adSlides];
   const lookbook = activeSorted(content.lookbook);
   const featured = catalog.find((p) => p.status === "live") ?? catalog[0];
   const featuredDrop = content.drops.find((d) => d.id === featured?.drop);

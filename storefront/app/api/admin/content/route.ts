@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 
 // GET    -> current content.json
 // PUT    -> replace the whole document (validated)
-// PATCH  -> {"op":"upsert","collection":"banners"|"lookbook"|"drops"|"designs","item":{...}}
+// PATCH  -> {"op":"upsert","collection":"banners"|"lookbook"|"drops"|"designs"|"campaigns","item":{...}}
 //           {"op":"remove","collection":...,"id":"..."}     (designs are keyed by slug: id = slug)
 //           {"op":"announcement","text":"..."}
 // Every write revalidates the site. A PATCH that races another write gets 409; just retry it.
@@ -46,11 +46,12 @@ export async function PATCH(req: Request) {
     if (body.op === "upsert") {
       const item = body.item ?? {};
       if (body.collection === "designs" && typeof item.slug === "string") item.id = item.slug;
-      const err = validateItem(body.collection, item);
-      if (err) return NextResponse.json({ error: err }, { status: 400 });
       const i = list.findIndex((x) => x.id === item.id);
-      if (i >= 0) list[i] = { ...list[i], ...item };
-      else list.push(item);
+      const merged = i >= 0 ? { ...list[i], ...item } : item;
+      const err = validateItem(body.collection, merged);
+      if (err) return NextResponse.json({ error: err }, { status: 400 });
+      if (i >= 0) list[i] = merged;
+      else list.push(merged);
     } else {
       const i = list.findIndex((x) => x.id === body.id);
       if (i < 0) return NextResponse.json({ error: `no ${body.collection} item with id ${body.id}` }, { status: 404 });

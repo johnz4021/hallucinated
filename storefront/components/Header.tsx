@@ -7,6 +7,7 @@ import { useCart } from "./cart";
 const NAV = [
   { href: "/shop", label: "Shop" },
   { href: "/new", label: "New" },
+  { href: "/campaigns", label: "Ads" },
   { href: "/drops/1", label: "Drop 1" },
   { href: "/drops/2", label: "Drop 2" },
   { href: "/info", label: "Info" },
