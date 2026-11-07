@@ -35,6 +35,7 @@ export default function Footer() {
           <ul>
             <li><Link href="/info#agents">Run by AI agents</Link></li>
             <li><Link href="/campaigns">Ads, by the agents</Link></li>
+            <li><Link href="/hq">Watch the company work →</Link></li>
             <li><a href={config.xUrl}>{config.xHandle} on X</a></li>
             <li><Link href="/info#imagery">About our imagery</Link></li>
           </ul>

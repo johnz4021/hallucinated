@@ -85,6 +85,20 @@ export async function loadHq(): Promise<HqResult> {
   } catch (e) {
     console.error("hq snapshot read failed:", (e as Error).message);
   }
-  if (process.env.VERCEL_ENV !== "production") return { doc: fixture as Hq, source: "fixture", received_at: null };
+  if (process.env.VERCEL_ENV !== "production") return { doc: shiftedFixture(), source: "fixture", received_at: null };
   return { doc: { version: 1, designs: [], timeline: [], human: [], by_agent: {}, counters: {} }, source: "empty", received_at: null };
+}
+
+// The sample day is re-dated so its newest event was two minutes ago (relative times read naturally).
+function shiftedFixture(): Hq {
+  const doc = structuredClone(fixture) as Hq & Record<string, unknown>;
+  const offset = Date.now() - 2 * 60_000 - Date.parse(String(doc.generated_at));
+  const walk = (v: unknown): unknown => {
+    if (Array.isArray(v)) return v.map(walk);
+    if (v && typeof v === "object") {
+      return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, (k === "at" || k === "generated_at") && typeof x === "string" ? new Date(Date.parse(x) + offset).toISOString() : walk(x)]));
+    }
+    return v;
+  };
+  return walk(doc) as Hq;
 }

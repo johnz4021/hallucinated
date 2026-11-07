@@ -3,6 +3,7 @@ import { Archivo, Martian_Mono } from "next/font/google";
 import { CartProvider } from "@/components/cart";
 import Footer from "@/components/Footer";
 import Header from "@/components/Header";
+import StoreChrome from "@/components/StoreChrome";
 import { getContent } from "@/lib/content";
 import "./globals.css";
 
@@ -27,10 +28,14 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       <body>
         <a href="#main" className="skip">Skip to content</a>
         <CartProvider>
-          {announcement && <p className="announce">{announcement}</p>}
-          <Header />
+          <StoreChrome>
+            {announcement && <p className="announce">{announcement}</p>}
+            <Header />
+          </StoreChrome>
           <main id="main">{children}</main>
-          <Footer />
+          <StoreChrome>
+            <Footer />
+          </StoreChrome>
         </CartProvider>
       </body>
     </html>
