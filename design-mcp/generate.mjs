@@ -80,10 +80,15 @@ export async function generateDesign(args, { openaiKey, outDir, baseUrl, log = (
   let clear = 0;
   // Knock out near-black: on a black tee it is invisible and would only print as stray ink (and it is how
   // leftover dark boxes sneak in). Dark text the model draws by mistake then shows up as missing, and QA fails it.
-  let knocked = 0;
+  // Neutral light ink -> bone. Semi-transparent ink hardened to opaque keeps its dim RGB, so "bone" came out as
+  // ~#606060 grey in print files (seen on ba3fd7d6b1f3, Sat 15:40). Grey isn't in the palette, so any low-chroma
+  // ink brighter than the knock-out threshold becomes bone #F2EEE6; coloured ink (eucalyptus, rust, sand) is untouched.
+  let knocked = 0, snapped = 0;
   for (let i = 3; i < data.length; i += 4) {
     data[i] = data[i] >= 128 ? 255 : 0;
-    if (data[i] && Math.max(data[i - 3], data[i - 2], data[i - 1]) < 48) { data[i] = 0; knocked++; }
+    const r = data[i - 3], g = data[i - 2], b = data[i - 1], hi = Math.max(r, g, b);
+    if (data[i] && hi < 48) { data[i] = 0; knocked++; }
+    else if (data[i] && hi - Math.min(r, g, b) < 24) { data[i - 3] = 242; data[i - 2] = 238; data[i - 1] = 230; snapped++; }
     if (!data[i]) clear++;
   }
   const hard = await sharp(data, { raw: { width: info.width, height: info.height, channels: 4 } }).png().toBuffer();
