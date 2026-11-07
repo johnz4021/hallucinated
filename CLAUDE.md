@@ -28,11 +28,16 @@ A streetwear brand on SF tech humor, run by Naïve agents (`@usenaive-sdk/vetta`
 - **Growth loop live:** deployment `dep_xkzj…` enabled, every 3 h at :20 (08:20–23:20 PT). First live post 14:18: https://x.com/hallucinateddpt/status/2119192715997168049. Support and ops-sales deployments still **paused**.
 - **X API limit:** replies/quotes only to posts that mention us or are ours (403 otherwise). So `x_post_scout` no longer posts: it queues drafts in `scout-queue.json` with an x.com intent link and John posts by hand (`scout_queue.command`). `x_reply` to people who mention us still works.
 
+## Status (Sat 15:15): autonomous loops on
+- **Design loop live:** Product (`dep_6ghs…`, 10:00 + 16:00 PT) researches trends (Reddit/HN/Threads/TikTok via Naïve socialData + `x_search`), generates 1–2 back-print designs, `propose_design` → CEO session → `ceo_decide` → code publishes a $65 **pre-order** to the live store (Stripe product + Blob print + `/api/mockup` images + `designs` dossier → "Why this exists" panel, `/new`, home "Fresh from the agents"). Guardrails in code: `brand.json` `banned_terms`, QA pass, max 2 proposals + 2 publishes / Pacific day / Stripe mode, one publish per design. Spend: no $ cap (John); ~$0.40–0.50 per Product run. Take anything down: `unpublish.command <slug>`.
+- **Growth every 1.5 h** (`growth` :20 at 8,11,14,17,20,23 + `growth-b` :50 at 9,12,15,18,21): pillar rotation picked in code (new_design > agents_log > spotlight > reply_bait > joke), store link in ≤1 of 3 posts, 12/day, 45 min gap, mockups attached. Announcements only for live-mode designs.
+- Support and ops-sales still paused. Pickup/courier files (`agents/pickup_watch.mjs`, `courier/tools.mjs`, `pickup_watch.command`, `courier_cancel.command`) are being changed outside this session; not committed by the lead.
+
 ## Next
 1. Real-card purchase check on the live store (John, refundable). Decide Vercel Pro (Hobby is non-commercial) and Stripe Tax. Confirm pre-order prices/launch windows and that Customania can make them.
-2. Wire Growth/Product to publish banners via the content admin API.
+2. Banners/lookbook from the agents (content admin API exists; no agent tool yet). Mockup renders bone ink as dim grey (storefront `lib/tee-svg.ts`).
 3. Later (John): sales batching once a day: `ops-sales` cron `"40 * * * *"` → `"0 21 * * *"` in `defs.mjs` plus `SALES_MIN_QTY=1`.
-4. Dropped for now (John, 14:07): order ledger + 7 pm courier pickup run. Parked code: session scratchpad `parked-pickup/` (not in repo). Customania automation stays as is.
+4. Pickup for drop #1 is back as a one-off (15:00): `pickup_watch.command` (agents/pickup_watch.mjs) checks the inbox every 5 min for a pickup mail naming CF5A93CRK / #1506 (John's relay or Customania's notice), marks it handled, starts one Ops session: courier_quote then courier_book, both with `pickup_time` "19:30" so Uber itself schedules the courier for 7:30 (quote = dry run through the schedule screen; John approves the booking in Studio; cancel in the Uber app). Was: dropped (John, 14:07): order ledger + 7 pm courier pickup run. Parked code: session scratchpad `parked-pickup/` (not in repo). Customania automation stays as is.
 5. Last, only if time: a dashboard. Naïve Studio already shows chats, tool calls and approvals.
 
 ## Repo layout
