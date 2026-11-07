@@ -1,0 +1,15 @@
+{
+  "_comment": "Price and fulfilment live here and only here. After changing unit_amount, run `npm run setup-stripe` (creates a new Price, moves the lookup key, archives the old one), then redeploy.",
+  "unit_amount": 6500,
+  "currency": "usd",
+  "fulfilment": "Pickup in SF (we'll email you when your shirt is ready)",
+  "lookup_key": "hallucinated-drop1-tee",
+  "drop": "drop-1",
+  "design_id": "bc1dbe9d9aae",
+  "product_name": "Hallucinated drop 1: git reset --hard tee",
+  "product_description": "Black tee. Front: Hallucinated wordmark. Back: > git reset --hard over a line-art map of SF.",
+  "sizes": ["S", "M", "L", "XL"],
+  "max_quantity": 5,
+  "x_url": "https://x.com/hallucinateddpt",
+  "x_handle": "@hallucinateddpt"
+}

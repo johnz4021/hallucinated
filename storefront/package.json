@@ -1,0 +1,27 @@
+{
+  "name": "hallucinated-store",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "node scripts/with-root-env.mjs next dev",
+    "build": "next build",
+    "start": "node scripts/with-root-env.mjs next start",
+    "setup-stripe": "node scripts/setup-stripe.mjs",
+    "push-env": "node scripts/push-vercel-env.mjs",
+    "test:checkout": "node scripts/test-checkout.mjs"
+  },
+  "dependencies": {
+    "next": "^16.4.5",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "server-only": "^0.0.1",
+    "stripe": "^23.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "@types/react": "^19.3.0",
+    "playwright": "^1.65.0",
+    "typescript": "^7.0.2"
+  }
+}

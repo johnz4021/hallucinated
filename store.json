@@ -1,0 +1,23 @@
+{
+  "url": "https://hallucinated-store.vercel.app",
+  "mode": "test",
+  "price_id": "price_1UZH8EBnHpN1EAwPy0NcjArA",
+  "product_id": "prod_VaS2cpGf4eFESb",
+  "lookup_key": "hallucinated-drop1-tee",
+  "unit_amount": 6500,
+  "currency": "usd",
+  "product": {
+    "name": "Hallucinated drop 1: git reset --hard tee",
+    "design_id": "bc1dbe9d9aae",
+    "sizes": [
+      "S",
+      "M",
+      "L",
+      "XL"
+    ]
+  },
+  "max_quantity": 5,
+  "fulfilment": "Pickup in SF (we'll email you when your shirt is ready)",
+  "stripe_account": "acct_1UZH4hBnHpN1EAwP",
+  "updated_at": "2026-11-07T21:32:09.787Z"
+}
