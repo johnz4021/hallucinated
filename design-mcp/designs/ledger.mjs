@@ -5,8 +5,8 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { readJson, writeJson } from "../lib/state.mjs";
 
-export const MAX_PROPOSALS_PER_DAY = () => Number(process.env.DESIGN_MAX_PROPOSALS_PER_DAY || 2);
-export const MAX_PUBLISHES_PER_DAY = () => Number(process.env.DESIGN_MAX_PUBLISHES_PER_DAY || 2);
+export const MAX_PROPOSALS_PER_DAY = () => Number(process.env.DESIGN_MAX_PROPOSALS_PER_DAY || 6);
+export const MAX_PUBLISHES_PER_DAY = () => Number(process.env.DESIGN_MAX_PUBLISHES_PER_DAY || 6);
 export const ptDay = (d = new Date()) => new Intl.DateTimeFormat("en-CA", { timeZone: "America/Los_Angeles", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(d));
 
 const file = (rootDir) => path.join(rootDir, "design-proposals.json");

@@ -22,6 +22,7 @@ import { txt, err, readJson } from "../lib/state.mjs";
 import { stripeClient, fetchOrders } from "../stripe/tools.mjs";
 import { listPreorders } from "../stripe/preorders.mjs";
 import { flagJohn } from "../agentmail/tools.mjs";
+import { checkSpend, videoPaused, imageVariants, maxAttempts, CUT_AT } from "../agents/spend_guard.mjs";
 import { findBanned } from "../designs/guard.mjs";
 import { storeAdmin } from "../designs/publish.mjs";
 import { ptDay } from "../designs/ledger.mjs";
@@ -211,7 +212,10 @@ export function registerCreativeTools(server, ctx) {
     const format = pickStyle(hist.map((h) => h.format), Math.random, AD_FORMAT_IDS);
     const style = pickStyle(hist.map((h) => h.style).filter(Boolean), Math.random, STYLE_IDS);
     mutateAds(ctx.rootDir, (x) => { (x.pending_formats ||= []).push({ format, style, at: new Date().toISOString(), test: testMode() }); x.pending_formats = x.pending_formats.slice(-6); });
+    // spend guard: once Naïve spend since Sat 13:00 PT is over the cut line, one image and one try per concept
+    await checkSpend({ rootDir: ctx.rootDir, vettaKey: ctx.vettaKey, log }).catch(() => null);
     return txt({ format, what: AD_FORMATS[format], style, style_how: STYLES[style].prompt, recent_formats: hist.slice(-5).map((h) => h.format),
+      variants: imageVariants(ctx.rootDir), max_attempts: maxAttempts(ctx.rootDir), ...(videoPaused(ctx.rootDir) ? { spend_guard: "spend is high: 1 image, 1 try per concept, no video" } : {}),
       note: "Pass format to ad_submit. The ad can be pure brand comedy or feature a product; keep any text short and exact. AI-generated people only, no real faces or names, no other brands' logos." });
   });
 
@@ -223,6 +227,8 @@ export function registerCreativeTools(server, ctx) {
   }, async ({ image_file_id, prompt, model = VIDEO_MODELS[0], aspect_ratio = "9:16", seconds = 5 }) => {
     try {
       const l = loadAds(ctx.rootDir);
+      await checkSpend({ rootDir: ctx.rootDir, vettaKey: ctx.vettaKey, log }).catch(() => null);
+      if (videoPaused(ctx.rootDir)) return err(`refused: the spend guard paused video ads (Naïve spend since Sat 13:00 PT is over $${CUT_AT()}); make image ads`);
       const today = videosStartedToday(l);
       if (today.length >= MAX_VIDEO_ADS_PER_DAY()) return err(`refused: already ${today.length} video today (limit ${MAX_VIDEO_ADS_PER_DAY()}); make image ads instead`);
       const job = await v.media.videos.generate({ model, prompt, image_urls: [image_file_id], aspect_ratio, seconds });

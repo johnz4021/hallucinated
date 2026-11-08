@@ -38,7 +38,7 @@ l.proposals.p1 = P("p1"); l.proposals.p2 = P("p2", { design_id: "bbbbbbbbbbbb", 
 l.proposals.p3 = P("p3", { mode: "live", design_id: "cccccccccccc" });
 l.proposals.p4 = P("p4", { proposed_at: "2026-01-01T12:00:00Z", design_id: "dddddddddddd" });
 saveProposals(root, l); l = loadProposals(root);
-assert.equal(MAX_PROPOSALS_PER_DAY(), 2); assert.equal(MAX_PUBLISHES_PER_DAY(), 2);
+assert.equal(MAX_PROPOSALS_PER_DAY(), 6); assert.equal(MAX_PUBLISHES_PER_DAY(), 6);
 assert.equal(proposalsToday(l, "test").length, 2);          // p1, p2 (p4 is another day, p3 another mode)
 assert.equal(proposalsToday(l, "live").length, 1);
 assert.equal(publishesToday(l, "test").length, 1);

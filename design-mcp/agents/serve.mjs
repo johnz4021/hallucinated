@@ -126,6 +126,19 @@ setInterval(async () => {
   finally { hqBusy = false; }
 }, 60_000).unref();
 
+// Spend guard (agents/spend_guard.mjs): Naïve spend since Sat 13:00 PT, checked every 5 min. >= $100: flag John once;
+// >= $175: Creative's video refuses, 1 image + 1 try per concept, flag John. Logs one line per threshold crossed only.
+// Loaded lazily, like [hq], so a broken guard can never take serve down.
+let spendBusy = false;
+const spendTick = async () => {
+  if (spendBusy) return; spendBusy = true;
+  try { await (await import("./spend_guard.mjs")).checkSpend({ rootDir: ROOT, vettaKey: key("VETTA_API_KEY"), log, force: true }); }
+  catch (e) { log(`[spend] check failed: ${String(e.message).slice(0, 160)}`); }
+  finally { spendBusy = false; }
+};
+setTimeout(spendTick, 30_000).unref();
+setInterval(spendTick, 5 * 60_000).unref();
+
 const stop = () => { try { fs.unlinkSync(STATE); } catch {} try { tunnel.stop(); } catch {} server.close(); log("== serve stopped"); process.exit(0); };
 process.on("SIGINT", stop); process.on("SIGTERM", stop); process.on("SIGHUP", stop);
 log("serve is up. Leave this window open; close it (or Ctrl-C) to stop the tools.");
