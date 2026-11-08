@@ -33,6 +33,19 @@ A streetwear brand on SF tech humor, run by Naïve agents (`@usenaive-sdk/vetta`
 - **Growth every 1.5 h** (`growth` :20 at 8,11,14,17,20,23 + `growth-b` :50 at 9,12,15,18,21): pillar rotation picked in code (new_design > agents_log > spotlight > reply_bait > joke), store link in ≤1 of 3 posts, 12/day, 45 min gap, mockups attached. Announcements only for live-mode designs.
 - Support and ops-sales still paused. Pickup/courier files (`agents/pickup_watch.mjs`, `courier/tools.mjs`, `pickup_watch.command`, `courier_cancel.command`) are being changed outside this session; not committed by the lead.
 
+## Status (Sat 16:15): deployments
+| deployment | cron (PT) | state |
+|---|---|---|
+| growth `dep_xkzj…` | 20 8-23/3 | on |
+| growth-b `dep_058m…` | 50 9-23/3 | on |
+| product `dep_6ghs…` | 0 10,16 | on (first live run 16:00 published `git-blame-ai-tee`, `npm-install-debt-tee`) |
+| ceo `dep_v5ce…` | 0 9 | **paused** (daily plan; awaiting John) |
+| creative `dep_abb2…` | 30 11,15,19 | **paused** (ad loop; awaiting John) |
+| support / ops-sales | */15 · 40 * | paused |
+- Enable one deployment: `v.deployments.update(id, {enabled: true})` or Studio. `setup_agents.mjs --enable-schedules` turns on EVERY deployment (incl. support, ops-sales).
+- Agents: product, ceo, ops, growth, support, creative (GLM, Naïve `generate_image` allow), reviewer (gemini-3-flash-preview, `view_image` only). Ad e2e assets: `order-runs/*_creative-e2e/assets/`.
+- Browser replies on x.com (`x_browser_reply`): **on hold**. Claude Code's permission classifier blocked recording John's override; not built.
+
 ## Next
 1. Real-card purchase check on the live store (John, refundable). Decide Vercel Pro (Hobby is non-commercial) and Stripe Tax. Confirm pre-order prices/launch windows and that Customania can make them.
 2. Banners/lookbook from the agents (content admin API exists; no agent tool yet). Mockup renders bone ink as dim grey (storefront `lib/tee-svg.ts`).
