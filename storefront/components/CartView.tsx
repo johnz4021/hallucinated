@@ -11,6 +11,9 @@ export default function CartView({ fulfilment: fulfilmentNote, contact }: { fulf
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [fulfilment, setFulfilment] = useState<"ship" | "pickup" | null>(null);
+  // The server decides pre-order vs buy-now from Stripe; if it asks for a choice the bag didn't expect
+  // (stale or mismatched bag), show the choice instead of a dead-end error.
+  const [needChoice, setNeedChoice] = useState(false);
 
   async function checkout() {
     setBusy(true);
@@ -21,10 +24,16 @@ export default function CartView({ fulfilment: fulfilmentNote, contact }: { fulf
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           items: cart.lines.map((l) => ({ price_id: l.priceId, quantity: l.qty })),
-          ...(cart.kind === "preorder" ? { fulfilment } : {}),
+          ...(fulfilment ? { fulfilment } : {}),
         }),
       });
       const data = await res.json().catch(() => ({}));
+      if (!res.ok && /shipping or pickup/i.test(String(data.error || ""))) {
+        setNeedChoice(true);
+        setError("Pick shipping or pickup above, then press the button again.");
+        setBusy(false);
+        return;
+      }
       if (!res.ok || !data.url) throw new Error(data.error || "Checkout didn't open. Try again.");
       window.location.assign(data.url);
     } catch (e) {
@@ -42,7 +51,7 @@ export default function CartView({ fulfilment: fulfilmentNote, contact }: { fulf
       </div>
     );
 
-  const pre = cart.kind === "preorder";
+  const pre = cart.kind === "preorder" || needChoice;
   const shipFee = config.shipping.rates.ship.amount;
   const freeOver = config.shipping.free_threshold;
   const windows = datedWindows(cart.lines.map((l) => l.launchWindow));
