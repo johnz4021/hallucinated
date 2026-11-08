@@ -120,8 +120,8 @@ export async function xSearch(keys, query, max = 10) {
     followers: users[t.author_id]?.public_metrics?.followers_count, text: t.text, created_at: t.created_at, ...t.public_metrics }));
 }
 
-const TWEET_FIELDS = "author_id,conversation_id,created_at,in_reply_to_user_id,referenced_tweets,entities,public_metrics";
-const mapTweet = (t, users) => ({ id: t.id, author_id: t.author_id, author: users[t.author_id]?.username, followers: users[t.author_id]?.public_metrics?.followers_count,
+const TWEET_FIELDS = "author_id,conversation_id,created_at,in_reply_to_user_id,referenced_tweets,entities,public_metrics,lang";
+const mapTweet = (t, users) => ({ id: t.id, author_id: t.author_id, author: users[t.author_id]?.username, followers: users[t.author_id]?.public_metrics?.followers_count, protected: !!users[t.author_id]?.protected, lang: t.lang || null,
   text: t.text, created_at: t.created_at, conversation_id: t.conversation_id, in_reply_to_user_id: t.in_reply_to_user_id || null,
   referenced: (t.referenced_tweets || []).map((r) => ({ type: r.type, id: r.id })), mentions: (t.entities?.mentions || []).map((m) => ({ id: m.id, username: m.username })),
   url: `https://x.com/${users[t.author_id]?.username || "i"}/status/${t.id}`, ...t.public_metrics });
@@ -139,7 +139,7 @@ export async function xMentions(keys, userId, { since_id, max = 20 } = {}) {
 
 // One post by id, with the author of any post it replies to or quotes (to check it engaged with us).
 export async function xGetTweet(keys, id) {
-  const qs = new URLSearchParams({ "tweet.fields": TWEET_FIELDS, expansions: "author_id,referenced_tweets.id.author_id", "user.fields": "username,public_metrics" });
+  const qs = new URLSearchParams({ "tweet.fields": TWEET_FIELDS, expansions: "author_id,referenced_tweets.id.author_id", "user.fields": "username,public_metrics,protected" });
   const r = await call(keys, "GET", `/2/tweets/${encodeURIComponent(id)}?${qs}`);
   const users = Object.fromEntries((r.includes?.users || []).map((u) => [u.id, u]));
   const refAuthors = Object.fromEntries((r.includes?.tweets || []).map((t) => [t.id, t.author_id]));

@@ -62,10 +62,10 @@
     ]
   },
   "x_rules": [
-    "API only, never script x.com",
+    "API only, never script x.com, except x_browser_reply (John's decision): about 1 browser reply an hour to a fresh, on-topic stranger's post, limits enforced in code",
     "original posts: at most 12 a day, at least 45 min apart; store link in at most 1 of every 3 (announcements exempt)",
     "automated replies only to people who replied to, mentioned or quoted us, and only one per person ever",
-    "replies or quotes to anyone else go into John's scout queue; never reply into trending threads",
+    "replies or quotes to anyone else: at most one per run through x_browser_reply, the rest into John's scout queue; never reply into trending or viral threads",
     "event posts (about a current SF/tech event): allowed automatically (John's override), at most 3 a day",
     "no hashtags except #hallucinated; no trending hashtags ever",
     "no auto-likes, no follows, no DMs"

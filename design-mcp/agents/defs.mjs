@@ -19,7 +19,7 @@ const BRAND = JSON.parse(fs.readFileSync(path.join(MCP_DIR, "brand.json"), "utf8
 export const ALL_MCP_TOOLS = [
   "generate_design",
   "customania_start", "customania_upload", "customania_place", "customania_checkout", "customania_pay", "customania_handoff_payment", "customania_payment_status", "customania_close", "issue_card",
-  "x_post", "x_mentions", "x_reply", "x_post_scout", "x_search", "x_delete", "store_link", "x_ads_tools", "x_ads", "x_ads_activate",
+  "x_post", "x_mentions", "x_reply", "x_post_scout", "x_browser_reply", "x_search", "x_delete", "store_link", "x_ads_tools", "x_ads", "x_ads_activate",
   "courier_quote", "courier_book", "courier_status",
   "inbox_list", "inbox_read", "inbox_reply", "inbox_mark_handled", "flag_john", "ops_courier_request",
   "stripe_orders", "sales_batch_start", "stripe_mark_batched", "sales_batch_abort",
@@ -62,6 +62,12 @@ export const DISABLED_BUILTINS = [
   "company.set_logo", "company.set_brand", "company.set_timezone", "build_media_skill", "create_character", "generate_3d_model", "build_3d",
 ];
 
+// Naïve's control-plane meta tools (served to sessions as vetta.*): Product burned 6 calls on vetta.tools_search hunting for
+// "board" tools. None of our agents needs the platform catalogue or its any-tool invoker, so both are off everywhere.
+export const PLATFORM_OFF = ["vetta.tools_search", "vetta.tools_execute"];
+// Naïve seems to inject a task board / cards idea; our agents have neither.
+export const NO_BOARD = "\nThere is no task board; ignore cards.";
+
 const VOICE = "Hallucinated: an agent-run streetwear brand from SF tech culture. Clean product (minimal, natural palette), unhinged marketing. " +
   "You are one of the AI agents that run the company; a human founder (John) approves anything that spends money. Brand rules: " + JSON.stringify(BRAND);
 // The design guardrails, word for word in Product's and the CEO's prompts (designs/guard.mjs also checks names, marks and tragedies in code).
@@ -100,8 +106,8 @@ export function agentDefs({ live = false, trendsAllow = false } = {}) {
     },
     growth: {
       name: "hallucinated-growth",
-      system: VOICE + "\nYou are Growth. You run the brand's X account (@hallucinateddpt) through the hallucinated x_* tools, inside X's automation rules (brand.json x_rules; the tools enforce them too): original posts with x_post, exactly one automated reply per person who replied to, mentioned or quoted us with x_reply, and replies or quotes to anyone else only as drafts through x_post_scout, which queues them for John to post by hand. Your voice is brand.json creative_direction: unhinged, edgy, dry; roast SF tech, the hype, the city and yourselves. You may post about current SF/tech moments (pass event:true; at most 3 a day, enforced), but never with hashtags (except #hallucinated), never into trending threads, and never about a real person or a real tragedy. Start every run with get_plan. Links only when growth_next_pillar says link_allowed; never invent a link. Never like, follow or DM. One joke per post. " + DESIGN_RULES + " " + NO_MONEY,
-      tools: { get_plan: "allow", x_post: "allow", x_mentions: "allow", x_reply: "allow", x_search: "allow", x_post_scout: "allow", store_link: "allow", store_new_designs: "allow", growth_next_pillar: "allow", agents_log: "allow", flag_john: "allow" },
+      system: VOICE + "\nYou are Growth. You run the brand's X account (@hallucinateddpt) through the hallucinated x_* tools, inside X's automation rules (brand.json x_rules; the tools enforce them too): original posts with x_post, exactly one automated reply per person who replied to, mentioned or quoted us with x_reply, and replies to anyone else either through x_browser_reply (at most ONE per run, on a fresh on-topic post from your own x_search; the tool enforces about one an hour) or as drafts through x_post_scout, which queues them for John to post by hand. Your voice is brand.json creative_direction: unhinged, edgy, dry; roast SF tech, the hype, the city and yourselves. You may post about current SF/tech moments (pass event:true; at most 3 a day, enforced), but never with hashtags (except #hallucinated), never into trending threads, and never about a real person or a real tragedy. Start every run with get_plan. Links only when growth_next_pillar says link_allowed; never invent a link. Never like, follow or DM. One joke per post. " + DESIGN_RULES + " " + NO_MONEY,
+      tools: { get_plan: "allow", x_post: "allow", x_mentions: "allow", x_reply: "allow", x_search: "allow", x_post_scout: "allow", x_browser_reply: "off" /* paused: X limited the automated login Sat 16:4x; John decides on a retry */, store_link: "allow", store_new_designs: "allow", growth_next_pillar: "allow", agents_log: "allow", flag_john: "allow" },
     },
     support: {
       name: "hallucinated-support",
@@ -141,8 +147,10 @@ const GROWTH_RUN =
    - reply_bait: a prompt that invites replies (e.g. "reply with the worst commit message you've ever pushed"). People who reply get our one automated reply later.
    - joke: an original joke in the creative_direction: roast SF tech life (the hype, the decks, Waymos, $9 toast, RTO, demo day, the agents, us). It may react to a current SF/tech moment: then pass event:true (at most 3 event posts a day; the tool counts). Never a real person, never a real tragedy, no hashtags.
    Put the store link (store_url) in only if link_allowed is true; new_design always carries its product URL. If x_post refuses (daily limit, too soon, duplicate, link rule), fix only what it says (e.g. drop the link) or accept it; don't rephrase to get around a limit.
-3. Scout queue: run up to 2 x_search queries for conversations where SF tech / AI-agent people joke about their work (e.g. '"vibe coding" -is:retweet lang:en', '"AI agents" (shipped OR deploy) -is:retweet lang:en'). Pick at most 2 posts where a reply from us would genuinely add a laugh, and draft them with x_post_scout (mode reply or quote, with a one-line why). They go to John's scout queue and he posts the ones he likes by hand (X's API won't let us reply to people who didn't mention us). Never reply to strangers any other way.
-End with: RESULT: {"replies":<n>,"pillar":"<pillar>","posted":"<post id or none>","announced":"<slug or none>","scout_drafts":<n>}`;
+3. Strangers: run up to 2 x_search queries for conversations where SF tech / AI-agent people joke about their work (e.g. '"vibe coding" -is:retweet lang:en', '"AI agents" (shipped OR deploy) -is:retweet lang:en'). Pick at most 2 posts where a reply from us would genuinely add a laugh (fresh, under 24 h, not a giant viral thread).
+   - The single best one: reply with x_browser_reply (target_url = its url from x_search, text = your reply, why = one line). Max 240 characters, no links, no hashtags, no @-mentions, nothing about a real person or tragedy; add to the joke, don't sell. Only ONE call per run, whatever it answers: if it refuses (too soon, outside hours, already replied to that person, off-topic), don't retry with another post; if it says paused or stopped, that's expected: no flag_john, no retry, don't mention it anywhere; the draft goes to x_post_scout.
+   - The rest (or the best one too, if x_browser_reply refused it): draft with x_post_scout (mode reply or quote, one-line why) for John to post by hand. Never reply to strangers any other way.
+End with: RESULT: {"replies":<n>,"pillar":"<pillar>","posted":"<post id or none>","announced":"<slug or none>","browser_reply":"<reply url, dry, refused: why, or none>","scout_drafts":<n>}`;
 
 export const TIMEZONE = "America/Los_Angeles";
 export function scheduleDefs() {
@@ -213,6 +221,7 @@ End with: RESULT: {"batched":true|false,"batch_ref":"<or null>","sizes":{...},"t
 export function applyTools(tools, def, allMcp = ALL_MCP_TOOLS) {
   let t = tools;
   for (const n of new Set([...ALL_BUILTINS, ...DISABLED_BUILTINS])) if (!def.builtins?.[n]) { try { t = withTool(t, n, { enabled: false }); } catch {} }
+  for (const n of PLATFORM_OFF) t = withTool(t, n, { enabled: false });   // checked on a throwaway agent: Naïve accepts these
   for (const [n, cfg] of Object.entries(def.builtins || {})) t = withTool(t, n, cfg);   // e.g. Creative's generate_image, the reviewer's view_image
   for (const n of new Set([...ALL_MCP_TOOLS, ...allMcp])) {
     const p = def.tools[n];
@@ -245,7 +254,7 @@ export async function pickModel(v) {
 export async function upsertAgent(v, def, { model, mcpUrl, allMcp, log = () => {} }) {
   const list = await v.agents.list({ limit: 100 });
   const same = (list.data || []).filter((a) => a.name === def.name);
-  const cfg = { name: def.name, model: def.model || model, window: "immediate", system: def.system, ...(mcpUrl ? { mcp_servers: [{ name: MCP, url: mcpUrl }] } : {}),
+  const cfg = { name: def.name, model: def.model || model, window: "immediate", system: def.system.includes(NO_BOARD.trim()) ? def.system : def.system + NO_BOARD, ...(mcpUrl ? { mcp_servers: [{ name: MCP, url: mcpUrl }] } : {}),
     budget: { cap_micro_usd: 20_000_000, max_task_micro_usd: 10_000_000, period: "month" } };
   let a = same[0] ? await v.agents.update(same[0].id, cfg).catch((e) => { log(`update ${def.name} failed (${e.message}); creating`); return null; }) : null;
   if (!a) a = await v.agents.create(cfg);

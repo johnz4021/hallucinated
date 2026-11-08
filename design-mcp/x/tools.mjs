@@ -15,6 +15,8 @@ import { creativeEvents, loadAds, mutateAds, queuedAds, testMode as adsTestMode,
 import { badHashtags } from "../creative/tools.mjs";
 import { PILLARS, LINK_WINDOW, nextPillar, linkAllowed, hasStoreLink, agentsLogEvents, pickSpotlight } from "../growth/pillars.mjs";
 import { loadProposals } from "../designs/ledger.mjs";
+import { flagJohn } from "../agentmail/tools.mjs";
+import { loadBrowserState, saveBrowserState, scheduleCheck, targetCheck, textCheck, endOfPtDay, withBrowserLock, browserReply } from "./browser.mjs";
 
 const txt = (o) => ({ content: [{ type: "text", text: JSON.stringify(o, null, 2) }] });
 const err = (m) => ({ isError: true, content: [{ type: "text", text: m }] });
@@ -340,8 +342,71 @@ export function registerXTools(server, ctx) {
     description: "Searches X posts from the last ~7 days with X's query syntax (e.g. '\"AI agents\" -is:retweet lang:en', 'from:someone', 'conversation_id:123'). Returns author, follower count, text, likes/reposts/replies and the post URL. Read-only. Use it to find conversations worth a reply and to read replies to our own posts. X's rules: never auto-reply to people found by keyword search; draft those for x_post_scout (John approves each).",
     inputSchema: { query: z.string(), max: z.number().int().min(10).max(50).optional() },
   }, async ({ query, max }) => {
-    try { const posts = await xSearch(keys, query, max || 10); ctx.log?.(`[x_search] ${query} -> ${posts.length}`); return txt({ count: posts.length, posts }); }
+    try {
+      const posts = await xSearch(keys, query, max || 10);
+      ctx.log?.(`[x_search] ${query} -> ${posts.length}`);
+      // x_browser_reply only accepts targets that came out of our own search (kept 24 h)
+      const st = loadBrowserState(ctx.rootDir), cut = Date.now() - 24 * 3600_000, at = new Date().toISOString();
+      st.seen = Object.fromEntries(Object.entries(st.seen || {}).filter(([, t]) => new Date(t).getTime() > cut));
+      for (const p of posts) st.seen[p.id] = at;
+      saveBrowserState(ctx.rootDir, st);
+      return txt({ count: posts.length, posts });
+    }
     catch (e) { return err(`x_search failed: ${e.message}`); }
+  });
+
+  server.registerTool("x_browser_reply", {
+    title: "Reply to a stranger's post through the browser (about 1 an hour)",
+    description: "Replies to ONE post you found with x_search, as @hallucinateddpt, through the real x.com in John's logged-in Chrome (X's API won't let us reply to people who didn't mention us). Checked in code before anything opens: 09:00-22:00 PT, at least 50 min since the last browser reply, max 13 a day; the post is from your x_search, under 24 h old, public, English, about SF / AI / startups, author under 200k followers, under 500 replies; one reply per person ever and never twice in a thread; the reply has no links, no hashtags, no @-mentions, max 240 characters, and passes the hard lines. If X shows any challenge, warning, rate limit or lock, replies stop for the rest of the day and John is told. Use it at most once per run, on your single best draft; the rest go to x_post_scout.",
+    inputSchema: { target_url: z.string().url().describe("the post's URL from x_search"), text: z.string().min(1).max(240), why: z.string().min(5).max(300).describe("one line for the log: why this conversation and why this reply adds something") },
+  }, async ({ target_url, text, why }) => {
+    try {
+      const st = loadBrowserState(ctx.rootDir);
+      const sched = scheduleCheck(st);
+      if (sched) return err(`refused: ${sched}. Not an error: put the draft in x_post_scout instead; nothing to flag.`);
+      const id = (String(target_url).match(/(?:x|twitter)\.com\/[^/]+\/status\/(\d+)/) || [])[1];
+      if (!id) return err("refused: target_url must be an x.com/<user>/status/<id> link from x_search");
+      const bad = textCheck(text);
+      if (bad) return err(`refused: ${bad}`);
+      if (!st.seen?.[id]) return err("refused: targets must come from your own x_search results (last 24 h); use the url x_search returned");
+      const m = await me();
+      const t = await xGetTweet(keys, id).catch(() => null);
+      const l = loadLedger(ctx);
+      const ledger = { authors: { ...(l.replied_authors || {}), ...(l.scouted_authors || {}), ...(l.browser_authors || {}) }, threads: l.browser_threads || {} };
+      const tgt = targetCheck(t, { me: m, seenInSearch: !!st.seen?.[id], ledger });
+      if (tgt) return err(`refused: ${tgt}`);
+      const url = `https://x.com/${t.author || "i"}/status/${id}`;
+      if (DRY()) {   // X_DRY_RUN: nothing opens at all
+        ctx.log?.(`[x_browser_reply X_DRY_RUN] would reply to ${url}: ${JSON.stringify(text)} (${why})`);
+        return txt({ dry_run: true, would_reply_to: url, text });
+      }
+      const dry = process.env.X_BROWSER_DRY === "1";
+      const r = await withBrowserLock(() => browserReply({ rootDir: ctx.rootDir, postUrl: url, text, dry, log: ctx.log }));
+      const at = new Date().toISOString();
+      const s2 = loadBrowserState(ctx.rootDir);
+      if (r.blocked) {
+        Object.assign(s2, { paused_until: endOfPtDay(), reason: `X showed: ${r.blocked}` });
+        saveBrowserState(ctx.rootDir, s2);
+        ctx.log?.(`[x_browser_reply] STOPPED for today: ${r.blocked}`);
+        flagJohn(ctx, { reason: "other", from_agent: "growth (x_browser_reply)", ref: url, summary: `X showed "${r.blocked}" on a browser reply. Browser replies are paused for the rest of the day; check the account in the X profile (x_login.command) before resuming.` });
+        return err(`stopped: X showed ${r.blocked}. Browser replies are paused for the rest of today and John was told; don't retry.`);
+      }
+      if (!r.ok) {
+        if (r.unconfirmed) { s2.replies = [...(s2.replies || []), { at, target: url, author: t.author, unconfirmed: true }]; saveBrowserState(ctx.rootDir, s2); }
+        return err(`not posted: ${r.reason}`);
+      }
+      s2.replies = [...(s2.replies || []), { at, target: url, author: t.author, url: r.url || null, text, why, ...(r.dry ? { dry: true } : {}) }].slice(-200);
+      saveBrowserState(ctx.rootDir, s2);
+      if (!r.dry) {
+        const l2 = loadLedger(ctx);
+        (l2.browser_authors ||= {})[t.author_id] = { username: t.author, tweet_id: id, reply_url: r.url || null, at };
+        if (t.conversation_id) (l2.browser_threads ||= {})[t.conversation_id] = { tweet_id: id, at };
+        l2.posts.push({ kind: "browser_reply", id: r.url ? r.url.split("/").pop() : null, at, text, to: t.author, why });
+        saveLedger(ctx, l2);
+      }
+      ctx.log?.(`[x_browser_reply] ${r.dry ? "DRY (filled, not posted)" : "posted"} -> ${url}${r.url ? " = " + r.url : ""}: ${JSON.stringify(text).slice(0, 120)}`);
+      return txt(r.dry ? { dry: true, target: url, note: r.note } : { posted: true, reply_url: r.url, target: url });
+    } catch (e) { return err(`x_browser_reply failed: ${e.message}`); }
   });
 
   server.registerTool("x_delete", {

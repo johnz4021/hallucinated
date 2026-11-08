@@ -3,8 +3,9 @@
 .env.*
 *.pem
 
-# browser profile (saved logins/cookies for Customania)
+# browser profiles (saved logins/cookies for Customania and John's x.com session)
 .pw-chrome-profile/
+.pw-x-profile/
 
 # run output: checkout screenshots and logs contain billing address, email, session ids
 customania-runs/
@@ -65,6 +66,7 @@ plans.json
 ads.json
 *.tmp
 scout-queue.json
+x-browser.json
 
 # /hq mission-control publisher (built output + cache)
 hq.json
