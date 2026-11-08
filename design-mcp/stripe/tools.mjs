@@ -67,6 +67,12 @@ const normColor = (c) => (c == null || c === "" ? null : String(c).trim().toLowe
 export const groupKey = (r) => `${r.design_id}|${r.garment}|${r.color}`;
 export const makeable = (r, list = MAKEABLE) => list.find((m) => m.design_id === r.design_id && m.garment === r.garment && m.color === r.color) || null;
 
+// Shipping (storefront 8efb7d9): ship | pickup from metadata.fulfilment, else the shipping rate's metadata; null = unknown
+// (older sales). shipping_usd from shipping_cost.amount_total. Addresses (shipping_details, collected_information,
+// customer_details.address) are NEVER read or returned here.
+export const fulfilmentOf = (s) => { const f = s?.metadata?.fulfilment || s?.shipping_cost?.shipping_rate?.metadata?.fulfilment || null; return f === "ship" || f === "pickup" ? f : null; };
+export const shippingUsdOf = (s) => (s?.shipping_cost?.amount_total != null ? s.shipping_cost.amount_total / 100 : null);
+
 export function parseOrders(sessions, lineItems, { drop = "drop-1", unbatchedOnly = true, ledger = {} } = {}) {
   const rows = [];
   for (const s of sessions) {
@@ -78,7 +84,8 @@ export function parseOrders(sessions, lineItems, { drop = "drop-1", unbatchedOnl
     const items = lineItems[s.id]?.length ? lineItems[s.id] : [{ quantity: 1 }];
     const base = { stripe_session_id: s.id, source: s.source || "checkout", email: s.customer_details?.email || s.customer_email || null, name: s.customer_details?.name || null,
       paid_at: new Date((s.created || 0) * 1000).toISOString(),
-      amount_total: s.amount_total != null ? (s.amount_total / 100).toFixed(2) + " " + String(s.currency || "").toUpperCase() : null, batched_into: batched };
+      amount_total: s.amount_total != null ? (s.amount_total / 100).toFixed(2) + " " + String(s.currency || "").toUpperCase() : null, batched_into: batched,
+      fulfilment: fulfilmentOf(s), shipping_usd: shippingUsdOf(s) };
     items.forEach((li, i) => {
       const pm = li.price?.metadata || {}, prod = li.price?.product && typeof li.price.product === "object" ? li.price.product.metadata || {} : {};
       const legacy = !pm.size && !prod.size;   // size on the session = the single-product store (drop-1 tee)
@@ -101,6 +108,18 @@ export function parseOrders(sessions, lineItems, { drop = "drop-1", unbatchedOnl
     });
   }
   return rows.sort((a, b) => a.paid_at.localeCompare(b.paid_at) || a.line - b.line);
+}
+
+// Pure: shipped vs pickup (vs unknown) per batch, by sale and by item, for John's summary
+export function fulfilmentCounts(rows) {
+  const out = { ship: { orders: 0, qty: 0, sizes: {} }, pickup: { orders: 0, qty: 0, sizes: {} }, unknown: { orders: 0, qty: 0, sizes: {} } };
+  const seen = new Set();
+  for (const r of rows) {
+    const b = out[r.fulfilment === "ship" || r.fulfilment === "pickup" ? r.fulfilment : "unknown"];
+    if (!seen.has(r.stripe_session_id)) { seen.add(r.stripe_session_id); b.orders++; }
+    b.qty += r.quantity || 0; if (r.size) b.sizes[r.size] = (b.sizes[r.size] || 0) + (r.quantity || 0);
+  }
+  return out;
 }
 
 export function sumSizes(rows) {
@@ -164,7 +183,8 @@ export async function fetchOrders(sc, rootDir, { since, drop = "drop-1", unbatch
     if (since && pi.created < Math.floor(new Date(since).getTime() / 1000)) continue;
     let items = []; try { items = JSON.parse(pi.metadata.items || "[]"); } catch {}
     sessions.push({ id: pi.id, source: "preorder", status: "complete", payment_status: "paid", created: pi.created, amount_total: pi.amount, currency: pi.currency,
-      metadata: { drop: pi.metadata.drop || null, batched_into: pi.metadata.batched_into || undefined, preorder_session: pi.metadata.preorder_session },
+      metadata: { drop: pi.metadata.drop || null, batched_into: pi.metadata.batched_into || undefined, preorder_session: pi.metadata.preorder_session, fulfilment: pi.metadata.fulfilment || undefined },
+      shipping_cost: pi.metadata.shipping_cents ? { amount_total: Number(pi.metadata.shipping_cents) } : undefined,
       customer_details: { email: pi.metadata.email || pi.receipt_email || null, name: pi.metadata.name || null }, payment_intent: null });
     lineItems[pi.id] = items.map((i) => ({ quantity: i.q, price: { metadata: { design_id: i.d, garment: i.g, color: i.c, size: i.s, drop: pi.metadata.drop } } }));
   }
@@ -249,7 +269,7 @@ export function registerStripeTools(server, ctx) {
 
   server.registerTool("stripe_orders", {
     title: "Paid store orders (Stripe)",
-    description: "Paid (status complete AND payment_status paid) Stripe Checkout Sessions for a drop, one row per line item: {stripe_session_id, design_id, garment, color, size, quantity, email, name, paid_at, amount_total, batched_into}. Also: batchable = the unbatched sales Customania can make (session_ids, size totals, print spec), needs_john = sales it can't (code already flagged them to John; never guess at those), whether a batch or payment handoff is open, and ready_to_batch with the reason. Read-only.",
+    description: "Paid (status complete AND payment_status paid) Stripe Checkout Sessions for a drop, one row per line item: {stripe_session_id, design_id, garment, color, size, quantity, email, name, paid_at, amount_total, batched_into, fulfilment (ship|pickup|null), shipping_usd}. Also: batchable = the unbatched sales Customania can make (session_ids, size totals, print spec), needs_john = sales it can't (code already flagged them to John; never guess at those), whether a batch or payment handoff is open, and ready_to_batch with the reason. Read-only.",
     inputSchema: { since: z.string().optional().describe("ISO date; only sessions created after it"), unbatched_only: z.boolean().optional(), drop: DROP },
   }, async ({ since, unbatched_only = true, drop = "all" }) => {
     try {
@@ -282,10 +302,12 @@ export function registerStripeTools(server, ctx) {
       const batch_ref = `batch-${new Date().toISOString().slice(0, 16).replace(/[-:T]/g, "")}-${crypto.randomBytes(2).toString("hex")}`;
       const bf = path.join(ctx.rootDir, "sales-batches.json"), all = readJson(bf, { batches: [] });
       if (ob?.stale) { const s = all.batches.find((x) => x.batch_ref === ob.batch_ref); if (s) Object.assign(s, { state: "aborted", reason: "stale (superseded)", closed_at: new Date().toISOString() }); }
-      all.batches.push({ batch_ref, drop, product: g.key, session_ids, sizes, state: "open", started_at: new Date().toISOString() });
+      const fulfil = fulfilmentCounts(rowsIn);
+      all.batches.push({ batch_ref, drop, product: g.key, session_ids, sizes, fulfilment: fulfil, state: "open", started_at: new Date().toISOString() });
       writeJson(bf, all);
       ctx.log?.(`[sales_batch_start] ${batch_ref} ${JSON.stringify(sizes)} from ${session_ids.length} sale(s)`);
-      return txt({ batch_ref, sizes, quantity: Object.values(sizes).reduce((a, b) => a + b, 0), session_ids, product: { design_id: g.design_id, garment: g.garment, color: g.color }, print_spec: g.print_spec });
+      return txt({ batch_ref, sizes, quantity: Object.values(sizes).reduce((a, b) => a + b, 0), fulfilment: fulfil,
+        fulfilment_note: `for John: ${fulfil.ship.orders} order(s) / ${fulfil.ship.qty} item(s) to SHIP (he mails these), ${fulfil.pickup.orders} / ${fulfil.pickup.qty} for pickup${fulfil.unknown.orders ? `, ${fulfil.unknown.orders} / ${fulfil.unknown.qty} with no fulfilment recorded (older orders: ask John)` : ""}`, session_ids, product: { design_id: g.design_id, garment: g.garment, color: g.color }, print_spec: g.print_spec });
     } catch (e) { return err("sales_batch_start failed: " + e.message); }
   });
 

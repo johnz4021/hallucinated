@@ -26,6 +26,14 @@ async function price(sc, id) {
   return priceCache.get(id);
 }
 
+// Shipping on pre-orders (John): $6 when the pre-order ships and its total is under $75; pickup or >= $75: free.
+// Older pre-orders without fulfilment: no fee, and the charge result asks John. Addresses are never read here.
+export const SHIP_FEE_CENTS = 600, FREE_SHIP_FROM_CENTS = 7500;
+export function shippingFeeCents(p) {
+  if (p.fulfilment !== "ship") return 0;
+  return (p.preorder_total_cents ?? 0) < FREE_SHIP_FROM_CENTS ? SHIP_FEE_CENTS : 0;
+}
+
 // Pure-ish: one pre-order from a setup-mode Checkout Session (setup_intent expanded) + resolved prices.
 export function preorderFromSession(s, prices) {
   let items = [];
@@ -39,6 +47,7 @@ export function preorderFromSession(s, prices) {
     has_payment_method: !!(si?.payment_method && si.status === "succeeded"),
     cancelled: md.preorder_status === "cancelled",
     setup_intent: si?.id || null,
+    fulfilment: (s.metadata?.fulfilment === "ship" || s.metadata?.fulfilment === "pickup") ? s.metadata.fulfilment : null,
     items: items.map((it) => {
       const p = prices[it.price_id] || {}, pm = p.metadata || {}, prod = typeof p.product === "object" ? p.product : {};
       const charge = md[mdKey(prod.id || "")] || null;
@@ -48,6 +57,14 @@ export function preorderFromSession(s, prices) {
         charged: !!charge && /^pi_/.test(charge), charge_ref: charge };
     }),
   };
+}
+
+// adds preorder_total_cents (metadata.preorder_total, else the items' sum) and shipping_usd (the fee charge_preorders adds)
+export function withShipping(p, s) {
+  const mdTotal = Number(s?.metadata?.preorder_total);
+  const total = Number.isFinite(mdTotal) && mdTotal > 0 ? mdTotal : p.items.reduce((n, i) => n + (i.unit_amount || 0) * i.qty, 0);
+  const q = { ...p, preorder_total_cents: total };
+  return { ...q, shipping_usd: shippingFeeCents(q) / 100, ...(p.fulfilment ? {} : { fulfilment_note: "no fulfilment recorded (older pre-order): no shipping fee; ask John ship or pickup" }) };
 }
 
 export async function listPreorders(sc, { includeCancelled = false } = {}) {
@@ -65,7 +82,7 @@ export async function listPreorders(sc, { includeCancelled = false } = {}) {
   const ids = [...new Set(sessions.flatMap((s) => { try { return JSON.parse(s.metadata.preorder_items || "[]").map((i) => i.price_id); } catch { return []; } }))];
   const prices = {};
   for (const id of ids) prices[id] = await price(sc, id).catch(() => null);
-  return sessions.map((s) => preorderFromSession(s, prices)).filter((p) => includeCancelled || !p.cancelled);
+  return sessions.map((s) => withShipping(preorderFromSession(s, prices), s)).filter((p) => includeCancelled || !p.cancelled);
 }
 
 async function setSiMeta(sc, siId, metadata) { if (siId) await sc.call("POST", `/setup_intents/${siId}`, { metadata }); }
@@ -73,22 +90,28 @@ async function setSiMeta(sc, siId, metadata) { if (siId) await sc.call("POST", `
 // One charge per (pre-order, product). Returns a result row; never throws for a card problem.
 export async function chargeOne(sc, ctx, p, productId, { kind = "preorder_charge" } = {}) {   // kind is overridden only by preorders_test.mjs
   const items = p.items.filter((i) => i.product_id === productId);
-  const amount = items.reduce((n, i) => n + (i.unit_amount || 0) * i.qty, 0);
-  const currency = items[0]?.currency || "usd";
-  const base = { preorder_session: p.preorder_session, email: p.email, name: p.name, amount_usd: amount / 100 };
   const ledFile = path.join(ctx.rootDir, "preorders-ledger.json"), led = readJson(ledFile, {}), lk = `${p.preorder_session}:${productId}`;
+  // shipping: once per pre-order, added to its first product charge (ledger key <session>:shipping)
+  const shipKey = `${p.preorder_session}:shipping`;
+  const ship = !led[shipKey] ? shippingFeeCents(p.preorder_total_cents != null ? p : { ...p, preorder_total_cents: p.items.reduce((n, i) => n + (i.unit_amount || 0) * i.qty, 0) }) : 0;
+  const amount = items.reduce((n, i) => n + (i.unit_amount || 0) * i.qty, 0) + ship;
+  const currency = items[0]?.currency || "usd";
+  const base = { preorder_session: p.preorder_session, email: p.email, name: p.name, amount_usd: amount / 100, fulfilment: p.fulfilment || null, shipping_usd: ship / 100,
+    ...(p.fulfilment ? {} : { note_for_john: "no fulfilment recorded on this pre-order: charged without shipping; ask John ship or pickup" }) };
   if (led[lk]) return { ...base, ok: led[lk].state === "charged", skipped: `already ${led[lk].state}` };
   const si = (await sc.call("GET", `/setup_intents/${p.setup_intent}`)).payment_method;
   const compact = JSON.stringify(items.map((i) => ({ p: i.price_id, q: i.qty, s: i.size, d: i.design_id, g: i.garment, c: i.color }))).slice(0, 500);
   const md = { kind, preorder_session: p.preorder_session, product_id: productId, items: compact, drop: items[0]?.drop || "",
-    email: String(p.email || "").slice(0, 200), name: String(p.name || "").slice(0, 200) };
+    email: String(p.email || "").slice(0, 200), name: String(p.name || "").slice(0, 200), fulfilment: p.fulfilment || "", shipping_cents: String(ship) };
   try {
     const pi = await sc.call("POST", "/payment_intents", { amount, currency, customer: p.customer, payment_method: si, off_session: "true", confirm: "true",
       description: `Pre-order: ${items[0]?.product || productId}`, receipt_email: p.email || undefined, metadata: md },
       { idempotencyKey: `preorder-${p.preorder_session}-${productId}` });
     if (pi.status !== "succeeded") throw Object.assign(new Error(`payment ${pi.status}`), { code: pi.status === "requires_action" ? "authentication_required" : pi.status, payment_intent: pi });
     await setSiMeta(sc, p.setup_intent, { [mdKey(productId)]: pi.id });
-    led[lk] = { state: "charged", payment_intent: pi.id, amount_usd: amount / 100, at: new Date().toISOString() }; writeJson(ledFile, led);
+    led[lk] = { state: "charged", payment_intent: pi.id, amount_usd: amount / 100, at: new Date().toISOString() };
+    if (ship) led[shipKey] = { state: "charged", payment_intent: pi.id, cents: ship, at: new Date().toISOString() };
+    writeJson(ledFile, led);
     return { ...base, ok: true, payment_intent: pi.id };
   } catch (e) {
     if (e.status && e.status >= 500) throw e;
@@ -102,6 +125,7 @@ export async function chargeOne(sc, ctx, p, productId, { kind = "preorder_charge
         metadata: { kind: "preorder_fallback", preorder_session: p.preorder_session, product_id: productId } }, { idempotencyKey: `preorder-inv-${p.preorder_session}-${productId}` });
       for (const [n, i] of items.entries()) await sc.call("POST", "/invoiceitems", { customer: p.customer, invoice: inv.id, amount: String((i.unit_amount || 0) * i.qty), currency,
         description: `${i.product || productId}${i.size ? " (" + i.size + ")" : ""} x${i.qty}`, metadata: { preorder_session: p.preorder_session } }, { idempotencyKey: `preorder-ii-${p.preorder_session}-${productId}-${n}` });
+      if (ship) await sc.call("POST", "/invoiceitems", { customer: p.customer, invoice: inv.id, amount: String(ship), currency, description: "Shipping", metadata: { preorder_session: p.preorder_session } }, { idempotencyKey: `preorder-ii-${p.preorder_session}-${productId}-ship` });
       const fin = await sc.call("POST", `/invoices/${inv.id}/finalize`, {});
       invoice = { id: fin.id, url: fin.hosted_invoice_url };
     } catch (ie) { invoice = { error: ie.message }; }
