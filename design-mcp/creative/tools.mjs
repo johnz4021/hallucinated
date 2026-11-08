@@ -27,6 +27,7 @@ import { storeAdmin } from "../designs/publish.mjs";
 import { ptDay } from "../designs/ledger.mjs";
 import { xKeys, xMe, xUserTweets } from "../x/xapi.mjs";
 import { storeCatalog, STORE_HOSTS } from "./catalog.mjs";
+import { STYLES, STYLE_IDS, AD_FORMATS, AD_FORMAT_IDS, pickStyle } from "../designs/styles.mjs";
 import { testMode, latestPlan, savePlan, loadAds, mutateAds, adsToday, videosStartedToday, newId, MAX_IMAGE_ADS_PER_DAY, MAX_VIDEO_ADS_PER_DAY } from "./ledger.mjs";
 
 const run = promisify(execFile);
@@ -199,6 +200,21 @@ export function registerCreativeTools(server, ctx) {
   });
 
   // ---------------- Creative: video ----------------
+  // ---------------- Creative: format rotation (so the ads don't all look like terminal screenshots) ----------------
+  server.registerTool("next_ad_format", {
+    title: "This ad's format and visual style (rotation)",
+    description: "Picks, in code, the format for your next ad (fake billboard, tabloid cover, museum placard, infomercial still, nature-doc still, catalog page, wanted poster, pitch-deck slide, job listing, terminal screenshot, incident report, editorial photo, airline safety card, trading card) and a visual style (photo box, halftone, flash snapshot, tabloid, ransom collage, zine, bootleg collage, woodcut, risograph, patent drawing, manuscript, 90s clip art, Y2K chrome, terminal). Never the same format twice in a row, preferring ones unused in the last 5. Call it once per concept and build the concept for it.",
+    inputSchema: {},
+  }, async () => {
+    const l = loadAds(ctx.rootDir);
+    const hist = (l.formats || []).filter((f) => !!f.test === testMode());
+    const format = pickStyle(hist.map((h) => h.format), Math.random, AD_FORMAT_IDS);
+    const style = pickStyle(hist.map((h) => h.style).filter(Boolean), Math.random, STYLE_IDS);
+    mutateAds(ctx.rootDir, (x) => { (x.pending_formats ||= []).push({ format, style, at: new Date().toISOString(), test: testMode() }); x.pending_formats = x.pending_formats.slice(-6); });
+    return txt({ format, what: AD_FORMATS[format], style, style_how: STYLES[style].prompt, recent_formats: hist.slice(-5).map((h) => h.format),
+      note: "Pass format to ad_submit. The ad can be pure brand comedy or feature a product; keep any text short and exact. AI-generated people only, no real faces or names, no other brands' logos." });
+  });
+
   server.registerTool("ad_video_start", {
     title: "Start a video ad from your best image (max 1 a day)",
     description: "Image-to-video: animates one of your generated images (its fil_ id) into a 5-8 s clip with Kling v3 Pro (default) or Veo 3.1 Fast. At most 1 video a day, enforced here. Takes a few minutes: poll ad_video_status with the job_id.",
@@ -300,7 +316,8 @@ export function registerCreativeTools(server, ctx) {
     description: "For an asset that PASSED ad_review: uploads it to our store's media, adds it to the store's Campaigns wall and home hero, and queues it for Growth to post on X. Caps: 4 image ads and 1 video ad a day. event=true only when the ad reacts to a specific current SF/tech event; then give its real sources. Captions: no hashtags except #hallucinated, no real people's names.",
     inputSchema: { file_id: z.string().regex(/^fil_[a-z0-9]+$/), review_id: z.string().regex(/^rev_[a-z0-9]+$/), kind: z.enum(["image", "video"]),
       concept: z.string().min(10).max(600), caption: z.string().min(1).max(280), event: z.boolean(), sources: z.array(SOURCE).max(10).optional(),
-      featured_products: z.array(z.string().max(80)).max(4).optional() },
+      featured_products: z.array(z.string().max(80)).max(4).optional(),
+      format: z.enum(AD_FORMAT_IDS).optional().describe("the format next_ad_format gave you for this concept") },
   }, async (a) => {
     try {
       const l = loadAds(ctx.rootDir);
@@ -320,8 +337,14 @@ export function registerCreativeTools(server, ctx) {
       // queued for Growth first (Growth posts the Naïve file itself), then the store copy
       const ad = { id, state: "queued", kind: a.kind, naive_file_id: a.file_id, media_url: null, poster_url: null, concept: a.concept.slice(0, 600), caption: a.caption.slice(0, 280), event: a.event,
         sources: (a.sources || []).slice(0, 6).map((s) => ({ label: s.label.slice(0, 120), url: s.url })), featured_products: (a.featured_products || []).slice(0, 4),
-        review_id: a.review_id, campaign: { ok: false, pending: true }, created_at: new Date().toISOString(), test: testMode() };
-      mutateAds(ctx.rootDir, (x) => { x.ads[id] = ad; });
+        review_id: a.review_id, format: a.format || null, campaign: { ok: false, pending: true }, created_at: new Date().toISOString(), test: testMode() };
+      mutateAds(ctx.rootDir, (x) => {
+        x.ads[id] = ad;
+        // the rotation history: the format this ad used (and the style issued with it), so the next pick avoids it
+        const issued = (x.pending_formats || []).find((f) => f.format === a.format && !!f.test === testMode());
+        if (a.format) { (x.formats ||= []).push({ format: a.format, style: issued?.style || null, ad_id: id, at: ad.created_at, test: testMode() }); x.formats = x.formats.slice(-60); }
+        if (issued) x.pending_formats = x.pending_formats.filter((f) => f !== issued);
+      });
       let store = { skipped: "ADS_SKIP_STORE=1" };
       if (process.env.ADS_SKIP_STORE !== "1") store = await publishAdToStore({ v, rootDir: ctx.rootDir, ad, outDir: ctx.outDir, baseUrl: ctx.baseUrl });
       log(`[ad_submit] ${id} ${a.kind}${a.event ? " EVENT" : ""} queued for Growth; store: ${store.media_url || store.skipped || store.error}${testMode() ? " (test)" : ""}`);

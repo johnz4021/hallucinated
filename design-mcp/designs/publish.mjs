@@ -1,6 +1,8 @@
 // Deterministic publish of an approved agent design (storefront/CONTENT.md §4). No LLM in here:
 //   1. upload the print (downscaled to 2000 px, PNG) -> Blob url
-//   2. mockup urls STORE/api/mockup?side=back|front&print=<url> (images[0]) and side=flat (images[1])
+//   2. images: [back mockup, FRONT mockup with the Hallucinated chest wordmark, flat]. Every agent shirt is two-sided: the
+//      front is always our wordmark (brand/hallucinated-logo-black-tee-chest-4in-300dpi.png, uploaded once, URL cached),
+//      the back is the agent's design. Metadata front=wordmark. backfillFront() brings older products up to this.
 //   3. Stripe product (status=preorder, origin=agents, drop=agents, ...) + one $65 price per S/M/L/XL, lookup key <slug>-<size>
 //   4. dossier: PATCH /api/admin/content collection "designs"
 //   5. POST /api/revalidate {"what":"all"}
@@ -10,7 +12,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import sharp from "sharp";
-import { envKey } from "../lib/state.mjs";
+import { fileURLToPath } from "node:url";
+import { envKey, readJson, writeJson } from "../lib/state.mjs";
 
 export const STORE = "https://hallucinated-store.vercel.app";
 export const SIZES = ["S", "M", "L", "XL"];
@@ -31,19 +34,31 @@ export function storeAdmin(rootDir, fetchImpl = fetch) {
   return { call };
 }
 
+// The front of every agent shirt: our real chest wordmark print (same front as drop #1), uploaded to Blob once.
+export const FRONT_LOGO_FILE = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "brand", "hallucinated-logo-black-tee-chest-4in-300dpi.png");
+export const FRONT_FEATURE = "Front: Hallucinated wordmark";
+export async function frontLogoUrl(rootDir, admin) {
+  const f = path.join(rootDir, "store-assets.json"), cache = readJson(f, {});
+  if (cache.front_wordmark_url) return cache.front_wordmark_url;
+  const up = await admin.call("POST", "/api/admin/upload?name=hallucinated-wordmark-front", { body: fs.readFileSync(FRONT_LOGO_FILE), type: "image/png" });
+  writeJson(f, { ...cache, front_wordmark_url: up.url, front_wordmark_at: new Date().toISOString() });
+  return up.url;
+}
+
 // Pure: what we send to Stripe, so the shape is unit-checked against the contract.
-export const mockupUrls = (printUrl, placement) => ({
-  main: `${STORE}/api/mockup?side=${placement}&print=${encodeURIComponent(printUrl)}`,   // images[0]: the print on a black tee
-  flat: `${STORE}/api/mockup?side=flat&print=${encodeURIComponent(printUrl)}`,           // images[1]: the print on shirt-black (light ink is invisible on a raw PNG)
+export const mockupUrls = (printUrl, placement, frontUrl) => ({
+  main: `${STORE}/api/mockup?side=${placement}&print=${encodeURIComponent(printUrl)}`,   // images[0]: the agent's print on a black tee (back)
+  ...(frontUrl ? { front: `${STORE}/api/mockup?side=front&print=${encodeURIComponent(frontUrl)}` } : {}),   // images[1]: the wordmark on the chest
+  flat: `${STORE}/api/mockup?side=flat&print=${encodeURIComponent(printUrl)}`,           // last: the print on shirt-black (light ink is invisible on a raw PNG)
 });
-export function productBody(p, { mockupUrl, flatUrl, placement }) {
+export function productBody(p, { mockupUrl, frontUrl, flatUrl, placement }) {
   const name = /\btee$/i.test(p.title.trim()) ? p.title.trim() : `${p.title.trim()} tee`;
   return {
-    name: clip(name, 120), description: clip(p.pitch, 350), images: [mockupUrl, flatUrl],
-    marketing_features: [{ name: "Black tee" }, { name: clip(`${placement === "front" ? "Front" : "Back"}: ${p.print_line || p.title}`, 80) },
+    name: clip(name, 120), description: clip(p.pitch, 350), images: [mockupUrl, ...(frontUrl ? [frontUrl] : []), flatUrl],
+    marketing_features: [{ name: "Black tee" }, { name: FRONT_FEATURE }, { name: clip(`Back: ${p.print_line || p.title}`, 80) },
       { name: "Pre-order: your card is saved, charged when it launches" }, { name: "Designed by our Product agent, approved by our CEO agent" }],
     metadata: { slug: p.slug, status: "preorder", origin: "agents", launch_window: "When it launches", drop: "agents", design_id: p.design_id,
-      garment: "tee", color: "black", category: "tees", placement, proposal_id: p.proposal_id },
+      garment: "tee", color: "black", category: "tees", placement, front: "wordmark", proposal_id: p.proposal_id },
   };
 }
 export const priceBody = (p, productId, size) => ({
@@ -79,15 +94,21 @@ export async function publishDesign({ rootDir, sc, admin, proposal: p, outDir, l
   const own = [...designHits, ...slugHits].find(mine) || null;
 
   // 1. print, downscaled (the 300-dpi file is far bigger than the 2000 px the site needs)
-  const png = await sharp(path.join(outDir, `${p.design_id}.png`)).resize(2000, 2000, { fit: "inside", withoutEnlargement: true }).png({ compressionLevel: 9 }).toBuffer();
-  if (png.length > 4_300_000) throw new Error(`print is ${png.length} bytes after downscaling (limit 4.4 MB)`);
+  // Full-colour photo/collage prints are much heavier than line art: step the size down until it fits the 4.4 MB upload limit
+  let png;
+  for (const px of [2000, 1600, 1400, 1200]) {
+    png = await sharp(path.join(outDir, `${p.design_id}.png`)).resize(px, px, { fit: "inside", withoutEnlargement: true }).png({ compressionLevel: 9, effort: 10 }).toBuffer();
+    if (png.length <= 4_200_000) break;
+  }
+  if (png.length > 4_200_000) throw new Error(`print is ${png.length} bytes even at 1200 px (limit 4.4 MB)`);
   const up = await admin.call("POST", `/api/admin/upload?name=${encodeURIComponent(`${p.slug}-print`)}`, { body: png, type: "image/png" });
   const printUrl = up.url;
   // 2. mockups (no call: the site renders them from the print URL)
-  const { main: mockupUrl, flat: flatUrl } = mockupUrls(printUrl, placement);
+  if (placement !== "back") throw Object.assign(new Error("agent shirts are back prints; the front is always the Hallucinated wordmark"), { permanent: true });
+  const { main: mockupUrl, front: frontUrl, flat: flatUrl } = mockupUrls(printUrl, placement, await frontLogoUrl(rootDir, admin));
   log(`[publish] ${p.slug}: print ${printUrl}`);
   // 3. Stripe product + prices: reuse this proposal's own product / an active same-amount price on a retry
-  const body = productBody(p, { mockupUrl, flatUrl, placement });
+  const body = productBody(p, { mockupUrl, frontUrl, flatUrl, placement });
   const prod = own
     ? await sc.call("POST", `/products/${own.id}`, { name: body.name, description: body.description, images: body.images, metadata: body.metadata })
     : await sc.call("POST", "/products", body, { idempotencyKey: `design-product-${p.proposal_id}` });
@@ -103,7 +124,7 @@ export async function publishDesign({ rootDir, sc, admin, proposal: p, outDir, l
   const dossier = await writeDossier(admin, p);
   // 5. revalidate
   const reval = await admin.call("POST", "/api/revalidate", { json: { what: "all" } }).then(() => true).catch((e) => { log(`[publish] revalidate failed: ${e.message}`); return false; });
-  return { mode: sc.mode, product_id: prod.id, price_ids, print_url: printUrl, mockup_url: mockupUrl, flat_url: flatUrl, placement, url: `${STORE}/p/${p.slug}`,
+  return { mode: sc.mode, product_id: prod.id, price_ids, print_url: printUrl, mockup_url: mockupUrl, front_url: frontUrl, flat_url: flatUrl, placement, url: `${STORE}/p/${p.slug}`,
     dossier, revalidated: reval, published_at: new Date().toISOString() };
 }
 
@@ -129,4 +150,26 @@ export async function archiveDesign({ sc, admin, slug, log = () => {} }) {
   const dossier = await admin.call("PATCH", "/api/admin/content", { json: { op: "remove", collection: "designs", id: slug } }).then(() => "removed").catch((e) => (e.status === 404 ? "none" : `error: ${e.message}`));
   const reval = await admin.call("POST", "/api/revalidate", { json: { what: "all" } }).then(() => true).catch(() => false);
   return { mode: sc.mode, archived: done, dossier, revalidated: reval };
+}
+
+// Brings an agent product published before the two-sided rule up to it, in place: images become [back mockup, front
+// wordmark mockup, flat], metadata front=wordmark, and the "Front: Hallucinated wordmark" feature line. Idempotent.
+export async function backfillFront({ sc, admin, rootDir, slug, dry = false, log = () => {} }) {
+  const prods = (await activeProducts(sc, "slug", slug)).filter((x) => x.metadata?.origin === "agents");
+  if (!prods.length) return { slug, mode: sc.mode, error: "no active agent product with that slug" };
+  const front = `${STORE}/api/mockup?side=front&print=${encodeURIComponent(await frontLogoUrl(rootDir, admin))}`;
+  const out = [];
+  for (const prod of prods) {
+    const imgs = prod.images || [];
+    const hasFront = imgs.some((u) => u === front || /[?&]side=front&/.test(u));
+    const images = hasFront ? imgs : [imgs[0], front, ...imgs.slice(1)].filter(Boolean).slice(0, 8);
+    const feats = (prod.marketing_features || []).map((f) => f.name);
+    const features = feats.includes(FRONT_FEATURE) ? feats : [feats[0] || "Black tee", FRONT_FEATURE, ...feats.slice(1)].filter(Boolean).slice(0, 15);
+    const patch = { images, metadata: { ...prod.metadata, front: "wordmark" }, marketing_features: features.map((name) => ({ name })) };
+    if (!dry) await sc.call("POST", `/products/${prod.id}`, patch);
+    out.push({ product_id: prod.id, images_before: imgs.length, images_after: images.length, front_added: !hasFront, feature_added: !feats.includes(FRONT_FEATURE), dry });
+    log(`[backfill] ${slug} ${prod.id} ${dry ? "(dry) " : ""}front ${hasFront ? "already there" : "added"}`);
+  }
+  if (!dry) await admin.call("POST", "/api/revalidate", { json: { what: "all" } }).catch(() => {});
+  return { slug, mode: sc.mode, front_mockup: front, products: out };
 }

@@ -26,7 +26,7 @@ export const ALL_MCP_TOOLS = [
   "trends",
   "preorders_list", "charge_preorders", "charge_preorders_status", "preorder_cancel", "preorder_send_payment_link",
   "propose_design", "ceo_decide", "store_new_designs", "growth_next_pillar", "agents_log",
-  "get_plan", "set_plan", "store_stats", "x_stats", "store_catalog", "ad_video_start", "ad_video_status", "ad_review", "ad_review_status", "ad_submit",
+  "get_plan", "set_plan", "store_stats", "x_stats", "store_catalog", "next_design_style", "next_ad_format", "ad_video_start", "ad_video_status", "ad_review", "ad_review_status", "ad_submit",
 ];
 // Never confirmed by code, whatever an agent's config says: a human decides each call in Naïve Studio.
 export const NEVER_AUTO = new Set(["customania_handoff_payment", "courier_book", "x_ads_activate", "issue_card", "charge_preorders"].map((n) => `${MCP}.${n}`));
@@ -75,9 +75,9 @@ export function agentDefs({ live = false, trendsAllow = false } = {}) {
   return {
     product: {
       name: "hallucinated-product",
-      system: VOICE + "\nYou are Product. You turn what's dominating AI and SF tech right now into shirt graphics. Every run starts with get_plan: lean into the CEO's themes. You research with the trends tool (Reddit, Threads, TikTok, Hacker News) and x_search (X, read-only), and write design briefs from what people actually joke about; you make print files with the hallucinated generate_design tool; you can't see images, the tool checks each result and returns pass/fail with issues, and you fix the prompt until it passes. Passing designs go to the CEO agent with propose_design; if approved they go on sale as pre-orders. " + DESIGN_RULES + " Trends are for designs only, never for posts. " + NO_MONEY,
+      system: VOICE + "\nYou are Product. You turn what's dominating AI and SF tech right now into shirt graphics: Supreme-style, spontaneous, varied (photo prints, collages, tabloid pages, woodcuts, risograph, clip art, chrome, line art: next_design_style picks the style in rotation). Every shirt is two-sided: the front is always our Hallucinated wordmark, your design is the BACK. When it fits (not every time), riff on our name: confidently-wrong AI, seeing things that aren't there, made-up facts stated with total certainty. Every run starts with get_plan: lean into the CEO's themes. You research with the trends tool (Reddit, Threads, TikTok, Hacker News) and x_search (X, read-only), and write design briefs from what people actually joke about; you make print files with the hallucinated generate_design tool; you can't see images, the tool checks each result and returns pass/fail with issues, and you fix the prompt until it passes. Passing designs go to the CEO agent with propose_design; if approved they go on sale as pre-orders. " + DESIGN_RULES + " Trends are for designs only, never for posts. " + NO_MONEY,
       // trends: allow (John, Sat evening: spending runs without asking; the tool still refuses any call over $0.01)
-      tools: { get_plan: "allow", generate_design: "allow", trends: "allow", x_search: "allow", propose_design: "allow", flag_john: "allow" },
+      tools: { get_plan: "allow", next_design_style: "allow", generate_design: "allow", trends: "allow", x_search: "allow", propose_design: "allow", flag_john: "allow" },
     },
     ceo: {
       name: "hallucinated-ceo",
@@ -112,7 +112,7 @@ export function agentDefs({ live = false, trendsAllow = false } = {}) {
     creative: {
       name: "hallucinated-creative",
       system: VOICE + "\nYou are Creative. You make the ads: image ads (and at most one video a day) that roast the SF tech zeitgeist in the brand's voice (brand.json creative_direction). Start every run with get_plan and follow its themes, push_products and ad_seeds. You may react to current SF/tech events (then the ad is an event ad with real sources). You make images with generate_image (reference images via image_urls: our logo and the featured product's images from store_catalog, so the product is exact); you can't see images, so a vision reviewer judges every asset with ad_review, and only an asset that passes can be published with ad_submit. Fix exactly what the reviewer says. " + DESIGN_RULES + " " + NO_MONEY,
-      tools: { get_plan: "allow", trends: "allow", x_search: "allow", store_catalog: "allow", ad_video_start: "allow", ad_video_status: "allow", ad_review: "allow", ad_review_status: "allow", ad_submit: "allow", flag_john: "allow" },
+      tools: { get_plan: "allow", next_ad_format: "allow", trends: "allow", x_search: "allow", store_catalog: "allow", ad_video_start: "allow", ad_video_status: "allow", ad_review: "allow", ad_review_status: "allow", ad_submit: "allow", flag_john: "allow" },
       // GLM-5.2 is text-only, but generate_image returns only a file id (verified in ad_test: no crash). generate_video stays
       // off: video goes through ad_video_start so the 1-a-day cap is enforced in code.
       builtins: { generate_image: { enabled: true, permission: "allow", config: { models: IMAGE_MODELS } } },
@@ -162,11 +162,11 @@ End with: RESULT: {"plan_version":<n>,"themes":<n>,"push_products":[...],"retire
       input_template:
 `Scheduled ad run. Make 1 or 2 ads that are actually funny to SF tech people today.
 1. get_plan (themes, push_products, ad_seeds). store_catalog (products, their images, and brand_refs). trends and x_search once or twice each for what SF/tech is laughing or groaning about right now (current events are allowed).
-2. Pick 1-2 concepts (brand.json creative_direction; formats like a fake launch, a fake deck slide, a fake job post, a billboard on the 101, a deadpan editorial photo with one line). Write each concept in 2-3 sentences for the record: the joke, the visual, why now. If it reacts to a specific event, note its real source URLs.
+2. For each of your 1-2 concepts call next_ad_format first: it picks the format (fake billboard, tabloid cover, museum placard, infomercial still, nature-doc still, catalog page, wanted poster, ...) and a visual style, in rotation, so the ads don't all look like terminal screenshots. Build the concept for that format and style (brand.json creative_direction). Write each concept in 2-3 sentences for the record: the joke, the visual, why now. If it reacts to a specific event, note its real source URLs.
 3. For each concept: generate_image (model google/gemini-3-pro-image or openai/gpt-image-2; aspect 4:5 or 1:1). If a product is featured, pass image_urls with brand_refs.logo and that product's image so the shirt and print are exact. Keep any text in the image to at most 2 short lines and spelled out exactly (image models duplicate or garble longer text). Fictional people only, no real faces, no other brands' logos.
 4. ad_review on each image (kind image, the concept, your caption, featured_slug if any, and text_in_image = the exact words you asked for), then ad_review_status until it's done. If it fails, fix exactly what the reviewer says and make a new image (at most 3 tries per concept).
 5. Optional, at most one per day (the tool enforces it): a video ad. Video models garble text in motion, so animate a passing image with little or no text (a visual joke: the caption carries the words), and say in the motion prompt "keep every logo and letter exactly as in the image". ad_video_start (Kling), poll ad_video_status, then ad_review it as kind video.
-6. ad_submit each PASSING asset with its concept, caption (dry, sharp, under 200 characters, no hashtags except #hallucinated), event true/false with sources, and featured_products. If a cap refuses it, stop.
+6. ad_submit each PASSING asset with its format (from next_ad_format), concept, caption (dry, sharp, under 200 characters, no hashtags except #hallucinated), event true/false with sources, and featured_products. If a cap refuses it, stop.
 End with: RESULT: {"concepts":<n>,"images":<n>,"videos":<n>,"submitted":["<ad_id>",...],"rejected_by_reviewer":<n>}` },
     { key: "product", agent: "product", cron: "0 10,16 * * *", budget_micro_usd: 2_000_000, label: "Product: trends -> 1-2 designs -> propose to the CEO, 10:00 and 16:00",
       input_template:
@@ -174,8 +174,8 @@ End with: RESULT: {"concepts":<n>,"images":<n>,"videos":<n>,"submitted":["<ad_id
 1. Research (read what people actually joke about; you can't post anything):
    - trends 2 or 3 times with different queries about SF / AI / startup life right now (e.g. "AI agents", "vibe coding", "san francisco startup"), platforms ["reddit","hn","threads","tiktok"];
    - x_search once or twice (e.g. '"AI agents" -is:retweet lang:en').
-2. Pick 1-2 ideas. ${DESIGN_RULES} Prefer a short line of text (a command, an error, a fake spec) with one simple line-art image, like our "> git reset --hard" tee. Keep the printed text to ONE line of at most 5 words, plain ASCII (no em-dashes, no fancy quotes): the image model garbles longer or multi-line text, and every garbled letter fails QA.
-3. For each idea, write the brief in your message for the record (2-3 sentences: the joke, the print, why now and for whom). Then generate_design with placement "back", the exact text, and references ["git-reset-back"] for our house style. If it fails QA, fix exactly the issues it lists and try again: at most 3 attempts per idea, then drop the idea.
+2. Pick 1-2 ideas. ${DESIGN_RULES} When it fits, riff on our name (confidently-wrong AI, hallucinated facts), not every time. Photos are AI-generated scenes, never real photos: fictional people, generic objects and SF scenes (an unbranded robotaxi, a server rack on fire, $9 toast) are fine. Keep any printed text short: at most 5 words per line, 1-2 lines, plain ASCII (no em-dashes, no fancy quotes): image models garble long text and every garbled letter fails QA.
+3. For each idea: next_design_style (the rotation's art style for this design), then write the brief for the record (2-3 sentences: the joke, the print in that style, why now and for whom). Then generate_design with placement "back", the exact text, and a prompt written for that style (leave style out: it uses the rotation's pick; override only if the joke truly needs another style, with style_reason). Use references ["git-reset-back"] only for the terminal/line-art style. If it fails QA, fix exactly the issues it lists and try again: at most 3 attempts per idea, then drop the idea.
 4. For each passing design: propose_design with the design_id, a short title, a slug ending in -tee, the pitch, the trend summary and 1-6 sources (the real post/thread URLs the tools returned; never invent a URL), and print_line. If it's refused (guardrails, daily limit, slug taken), accept it: change the slug if it was taken, otherwise drop the idea. Never reword a name to dodge the check.
 The CEO agent decides each proposal in its own session; you don't wait for it.
 End with: RESULT: {"ideas":<n>,"attempts":<n>,"proposed":["<proposal_id>",...],"dropped":"<why, or none>"}` },
@@ -199,8 +199,8 @@ If ready_to_batch is false, stop right away and end with RESULT: {"batched":fals
 If it is true:
 1. sales_batch_start with session_ids = batchable.session_ids (exactly those). Use the sizes and print_spec it returns, exactly.
 2. customania_start with base_size = the first size in those sizes.
-3. FRONT: customania_upload side "front", design "${d1.front.design}"; customania_place side "front" width_in ${d1.front.width_in} top_in ${d1.front.top_in}. Retry place until within_tolerance is true.
-4. BACK: customania_upload side "back", design "${d1.design_id}"; customania_place side "back" width_in ${d1.back.width_in} top_in ${d1.back.top_in}. Retry until within_tolerance.
+3. FRONT: customania_upload side "front", design = print_spec.front.design (the Hallucinated wordmark, "${d1.front.design}"); customania_place side "front" width_in print_spec.front.width_in top_in print_spec.front.top_in (${d1.front.width_in} / ${d1.front.top_in} for every shirt). Retry place until within_tolerance is true.
+4. BACK: customania_upload side "back", design = print_spec.design_id (drop #1 or the agent design in this batch); customania_place side "back" width_in print_spec.back.width_in top_in print_spec.back.top_in. Retry until within_tolerance.
 5. customania_checkout with those sizes, email "${CONTACT.email}", first_name "${CONTACT.first}", last_name "${CONTACT.last}". The cart must match the sizes exactly; if not: sales_batch_abort, customania_close, flag_john, stop.
 6. customania_handoff_payment with amount_due = the checkout total. It waits for John's approval; that's expected. Then customania_payment_status again and again until state is "paid" or "timed_out". Don't close while it says waiting.
 7. If paid: stripe_mark_batched with the same session_ids, the batch_ref and customania_order = the order number. If not paid: sales_batch_abort with the reason and flag_john.

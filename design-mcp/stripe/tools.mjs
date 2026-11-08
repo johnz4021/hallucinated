@@ -10,7 +10,16 @@ import crypto from "node:crypto";
 import { z } from "zod";
 import { envKey, readJson, writeJson, txt, err } from "../lib/state.mjs";
 import { orderSessionsInfo } from "../customania/tools.mjs";
-import { MAKEABLE } from "../agents/config.mjs";
+import { MAKEABLE, DROPS } from "../agents/config.mjs";
+import { loadProposals } from "../designs/ledger.mjs";
+
+// What Customania can make: drop #1 plus every agent design published in this Stripe mode. Agent shirts print exactly like
+// drop #1: the Hallucinated wordmark on the front (drop #1's front file and placement) and the agent's design on the back.
+export function makeableList(rootDir, mode) {
+  const agentDesigns = Object.values(loadProposals(rootDir).proposals).filter((p) => p.state === "published" && p.mode === mode)
+    .map((p) => ({ design_id: p.design_id, garment: "tee", color: "black", front: DROPS["drop-1"].front, back: { width_in: 11, top_in: 1 }, agent_slug: p.slug }));
+  return [...MAKEABLE, ...agentDesigns.filter((a) => !MAKEABLE.some((m) => m.design_id === a.design_id))];
+}
 import { flagJohn } from "../agentmail/tools.mjs";
 
 const API = "https://api.stripe.com/v1";
@@ -184,7 +193,7 @@ function flagUnmakeable(rootDir, log, needsJohn) {
 
 export async function salesStatus(sc, rootDir, { since, drop = "drop-1", minQty = Number(process.env.SALES_MIN_QTY || 3), maxWaitH = Number(process.env.SALES_MAX_WAIT_H || 24), log, flag = true } = {}) {
   const orders = await fetchOrders(sc, rootDir, { since, drop, unbatchedOnly: true });
-  const plan = planBatches(orders);
+  const plan = planBatches(orders, makeableList(rootDir, sc.mode));
   if (flag) flagUnmakeable(rootDir, log, plan.needs_john);
   const g = plan.groups[0] || null;   // one makeable product today; more groups = more Customania orders, one per run
   const qty = g?.quantity || 0;
@@ -261,7 +270,7 @@ export function registerStripeTools(server, ctx) {
       if (ob && !ob.stale) return err(`refused: batch ${ob.batch_ref} is still open; finish it (stripe_mark_batched) or abort it (sales_batch_abort)`);
       if (orderSessionsInfo().handoff_pending) return err("refused: a Customania payment handoff is still waiting for John");
       const rowsAll = await fetchOrders(need(), ctx.rootDir, { drop, unbatchedOnly: true });
-      const plan = planBatches(rowsAll);
+      const plan = planBatches(rowsAll, makeableList(ctx.rootDir, need().mode));
       const g = plan.groups.find((x) => session_ids.every((id) => x.session_ids.includes(id)));
       if (!g) {
         const bad = session_ids.filter((id) => !plan.groups.some((x) => x.session_ids.includes(id)));

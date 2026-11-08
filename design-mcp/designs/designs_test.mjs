@@ -8,7 +8,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { checkProposal, findBanned, SLUG_RE } from "./guard.mjs";
 import { loadProposals, saveProposals, proposalsToday, publishesToday, publishedDesign, openProposal, slugTaken, ptDay, MAX_PROPOSALS_PER_DAY, MAX_PUBLISHES_PER_DAY } from "./ledger.mjs";
-import { publishDesign, productBody, priceBody, dossierItem, mockupUrls, STORE } from "./publish.mjs";
+import { publishDesign, productBody, priceBody, dossierItem, mockupUrls, backfillFront, FRONT_FEATURE, STORE } from "./publish.mjs";
 import { announceCheck, markAnnounced } from "./tools.mjs";
 
 const OUT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "design-test");
@@ -77,7 +77,7 @@ function stripeStub() {
 }
 const adminStub = () => ({ calls: [], designs: {}, async call(method, p, o = {}) {
   this.calls.push({ method, p, o });
-  if (p.startsWith("/api/admin/upload")) { assert.ok(o.body.length > 1000 && o.body.length < 4_400_000); assert.equal(o.type, "image/png"); return { url: "https://x2ww2cgnt2vbaqob.public.blob.vercel-storage.com/media/agents/merge-conflict-tee-print-abc.png" }; }
+  if (p.startsWith("/api/admin/upload")) { assert.ok(o.body.length > 1000 && o.body.length < 4_400_000); assert.equal(o.type, "image/png"); const name = new URL("https://x" + p).searchParams.get("name"); return { url: `https://x2ww2cgnt2vbaqob.public.blob.vercel-storage.com/media/agents/${name}-abc.png` }; }
   if (p === "/api/admin/content") { if (o.json.op === "upsert") this.designs[o.json.item.slug] = o.json.item; return { ok: true }; }
   if (p === "/api/revalidate") return { ok: true };
   throw new Error("admin stub: " + p);
@@ -90,9 +90,14 @@ const prop = { proposal_id: "prop_t1", mode: "test", design_id: "bc1dbe9d9aae", 
 const pub = await publishDesign({ rootDir: root, sc, admin, proposal: prop, outDir: OUT });
 const prod = sc.products[0];
 assert.equal(sc.products.length, 1); assert.equal(pub.product_id, prod.id);
-assert.deepEqual(prod.metadata, { slug: "merge-conflict-tee", status: "preorder", origin: "agents", launch_window: "When it launches", drop: "agents", design_id: "bc1dbe9d9aae", garment: "tee", color: "black", category: "tees", placement: "back", proposal_id: "prop_t1" });
+assert.deepEqual(prod.metadata, { slug: "merge-conflict-tee", status: "preorder", origin: "agents", launch_window: "When it launches", drop: "agents", design_id: "bc1dbe9d9aae", garment: "tee", color: "black", category: "tees", placement: "back", front: "wordmark", proposal_id: "prop_t1" });
 assert.equal(prod.name, "Merge conflict tee");
-assert.match(prod.images[0], /\/api\/mockup\?side=back&print=https%3A%2F%2Fx2ww/); assert.match(prod.images[1], /\/api\/mockup\?side=flat&print=/);
+// two-sided: [back mockup of the design, FRONT mockup of the chest wordmark, flat]
+assert.equal(prod.images.length, 3);
+assert.match(prod.images[0], /\/api\/mockup\?side=back&print=.*merge-conflict-tee-print/);
+assert.match(prod.images[1], /\/api\/mockup\?side=front&print=.*hallucinated-wordmark-front/);
+assert.match(prod.images[2], /\/api\/mockup\?side=flat&print=.*merge-conflict-tee-print/);
+assert.ok(prod.marketing_features.some((f) => f.name === FRONT_FEATURE));
 assert.equal(sc.prices.length, 4);
 for (const [i, size] of ["S", "M", "L", "XL"].entries()) {
   const pr = sc.prices[i];
@@ -107,17 +112,31 @@ assert.ok(sc.calls.filter((c) => c.method === "POST" && c.p === "/products").eve
 
 // retry of the same proposal: updates in place, reuses the prices (no duplicates)
 await publishDesign({ rootDir: root, sc, admin, proposal: prop, outDir: OUT });
+assert.equal(admin.calls.filter((c) => /name=hallucinated-wordmark-front/.test(c.p)).length, 1);   // the front wordmark is uploaded once, then cached
 assert.equal(sc.products.length, 1); assert.equal(sc.prices.length, 4);
 // the same design under ANY other proposal is refused (published once, ever); so is the same slug
 await assert.rejects(publishDesign({ rootDir: root, sc, admin, proposal: { ...prop, proposal_id: "prop_t2", slug: "another-slug-tee" }, outDir: OUT }), /already on sale/);
 await assert.rejects(publishDesign({ rootDir: root, sc, admin, proposal: { ...prop, proposal_id: "prop_t3", design_id: "9ab8a02eaec1" }, outDir: OUT }), /slug merge-conflict-tee is already used/);
 assert.equal(sc.products.length, 1);
 // request-shape helpers, directly
-assert.deepEqual(mockupUrls("https://b/x.png", "front"), { main: `${STORE}/api/mockup?side=front&print=https%3A%2F%2Fb%2Fx.png`, flat: `${STORE}/api/mockup?side=flat&print=https%3A%2F%2Fb%2Fx.png` });
+assert.deepEqual(mockupUrls("https://b/x.png", "back", "https://b/logo.png"), { main: `${STORE}/api/mockup?side=back&print=https%3A%2F%2Fb%2Fx.png`, front: `${STORE}/api/mockup?side=front&print=https%3A%2F%2Fb%2Flogo.png`, flat: `${STORE}/api/mockup?side=flat&print=https%3A%2F%2Fb%2Fx.png` });
 assert.equal(productBody({ ...prop, title: "Ship it tee" }, { mockupUrl: "a", flatUrl: "b", placement: "back" }).name, "Ship it tee");
 assert.equal(priceBody(prop, "prod_x", "XL").lookup_key, "merge-conflict-tee-xl");
 assert.equal(dossierItem({ ...prop, sources: Array(9).fill(prop.sources[0]) }).trend.sources.length, 6);
-console.log("publish (stubbed Stripe + store): OK");
+// backfill: a product published before the two-sided rule gets the front image, metadata and feature, in place, once
+sc.products.push({ id: "prod_old", active: true, name: "Old tee", images: ["https://hallucinated-store.vercel.app/api/mockup?side=back&print=x", "https://hallucinated-store.vercel.app/api/mockup?side=flat&print=x"],
+  marketing_features: [{ name: "Black tee" }, { name: "Back: old joke" }], metadata: { slug: "old-tee", origin: "agents", placement: "back", design_id: "aaaaaaaaaaaa" } });
+const bf = await backfillFront({ sc, admin, rootDir: root, slug: "old-tee" });
+const old = sc.products.find((x) => x.id === "prod_old");
+assert.equal(bf.products[0].front_added, true); assert.equal(old.images.length, 3);
+assert.match(old.images[1], /side=front&print=.*hallucinated-wordmark-front/); assert.match(old.images[0], /side=back/); assert.match(old.images[2], /side=flat/);
+assert.equal(old.metadata.front, "wordmark"); assert.equal(old.metadata.slug, "old-tee");
+assert.deepEqual(old.marketing_features.map((f) => f.name), ["Black tee", FRONT_FEATURE, "Back: old joke"]);
+const bf2 = await backfillFront({ sc, admin, rootDir: root, slug: "old-tee" });
+assert.equal(bf2.products[0].front_added, false); assert.equal(old.images.length, 3); assert.equal(old.marketing_features.length, 3);   // idempotent
+const dry = await backfillFront({ sc, admin, rootDir: root, slug: "merge-conflict-tee", dry: true });
+assert.equal(dry.products[0].front_added, false);   // published with the front already
+console.log("publish (stubbed Stripe + store, two-sided, backfill): OK");
 
 // ---- announce once
 l = loadProposals(root);

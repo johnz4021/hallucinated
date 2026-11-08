@@ -12,6 +12,7 @@ import { txt, err } from "../lib/state.mjs";
 import { stripeClient } from "../stripe/tools.mjs";
 import { flagJohn } from "../agentmail/tools.mjs";
 import { checkProposal, SLUG_RE } from "./guard.mjs";
+import { STYLES, issueStyle, loadStyleLedger } from "./styles.mjs";
 import { loadProposals, saveProposals, updateProposal, newProposalId, proposalsToday, publishesToday, publishedDesign, openProposal, slugTaken, MAX_PROPOSALS_PER_DAY, MAX_PUBLISHES_PER_DAY } from "./ledger.mjs";
 import { publishDesign, storeAdmin, activeProducts, placementOf, STORE, PRICE_CENTS } from "./publish.mjs";
 
@@ -43,6 +44,17 @@ export function registerDesignTools(server, ctx) {
     return fs.existsSync(f) && fs.existsSync(path.join(ctx.outDir, `${path.basename(String(id))}.png`)) ? JSON.parse(fs.readFileSync(f, "utf8")) : null;
   };
 
+  server.registerTool("next_design_style", {
+    title: "This run's art style (rotation)",
+    description: "Picks the art style for your next design, in code: never the same as the last design, preferring styles unused in the last 5 (photo box print, halftone photo, flash snapshot, tabloid front page, ransom-note collage, photocopy zine, bootleg rap-tee collage, woodcut, risograph 2-colour, patent drawing, medieval manuscript, 90s clip art, Y2K chrome, terminal line art). Write your generate_design prompt for this style; generate_design uses it automatically. You may override it only with a reason the joke demands.",
+    inputSchema: {},
+  }, async () => {
+    const style = issueStyle(ctx.rootDir);
+    const recent = loadStyleLedger(ctx.rootDir).history.slice(-5).map((h) => h.style);
+    return txt({ style, label: STYLES[style].label, family: STYLES[style].family, how: STYLES[style].prompt, recent_styles: recent,
+      note: "Photos are AI-generated scenes (never real photos): fictional people only, no real faces or names, no other brands' logos." });
+  });
+
   server.registerTool("propose_design", {
     title: "Propose a passing design for the store (the CEO agent decides)",
     description: "After generate_design PASSED for an idea: proposes it as a new pre-order tee. Checked in code: the design exists and passed QA, isn't already proposed or on sale, title/slug/pitch/printed text have no real people, trademarks or tragedies, and at most 2 proposals a day. Then the CEO agent reviews it in its own session and approves or rejects. Returns proposal_id.",
@@ -63,6 +75,7 @@ export function registerDesignTools(server, ctx) {
       const verdict = verdictOf(a.design_id);
       if (!verdict) return err(`refused: no design ${a.design_id} (use the id generate_design returned)`);
       if (!verdict.pass) return err(`refused: design ${a.design_id} did not pass QA (${(verdict.issues || []).join("; ")}); fix the prompt and generate again`);
+      if (placementOf(verdict) !== "back") return err("refused: agent shirts are two-sided: the front is always the Hallucinated wordmark, so your design must be a BACK print (generate_design placement \"back\")");
       if (!SLUG_RE.test(a.slug)) return err("refused: slug must be lowercase letters, digits and single dashes");
       if (a.sources.some((s) => !/^https?:\/\//.test(s.url))) return err("refused: sources need http(s) URLs");
       const hits = checkProposal({ ...a, print_text: `${verdict.text_seen || ""} ${verdict.args?.text || ""}`, prompt: verdict.args?.prompt });

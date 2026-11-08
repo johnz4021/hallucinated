@@ -6,12 +6,15 @@ import path from "node:path";
 import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
 import sharp from "sharp";
+import { STYLES } from "./designs/styles.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const BRAND = JSON.parse(fs.readFileSync(path.join(HERE, "brand.json"), "utf8"));
 const IMAGE_MODELS = (process.env.IMAGE_MODELS || "gpt-image-2,gpt-image-1.5,gpt-image-1").split(",");
 const VISION_MODELS = (process.env.VISION_MODELS || "gpt-5-mini,gpt-4.1-mini,gpt-4o-mini").split(",");
 const PALETTE_TEXT = Object.entries(BRAND.palette).map(([k, v]) => `${k} ${v}`).join(", ");
+// QA always also checks the brand's banned list (real people, other brands' logos, ...), whatever the style
+const bannedLine = () => `Also fail it if it shows any of: ${BRAND.banned.join("; ")}.`;
 
 async function openai(key, endpoint, body) {
   const r = await fetch(`https://api.openai.com/v1/${endpoint}`, {
@@ -47,8 +50,42 @@ async function withFallback(models, fn) {
   throw last;
 }
 
+// Per-family art rules and QA criteria (styles live in designs/styles.mjs).
+const FAMILY_ART = {
+  ink: (style) => [
+    `It prints on a BLACK shirt: every mark (text, shapes, lines) must be a LIGHT, solid, flat color (bone #F2EEE6 by default, eucalyptus #8A9A80 or sand #CBB894 for accents). Never black, dark grey or dark green: dark ink is invisible on the shirt. No box, panel or plate behind the text.`,
+    ...BRAND.art_style.map((r) => `- ${r}`),
+    `Colors limited to: ${PALETTE_TEXT}.`,
+    `Style: ${style.prompt}`,
+  ],
+  photo: (style) => [
+    `Style: ${style.prompt}`,
+    "The photo is an AI-generated scene, never a real photograph: fictional people only (no real or famous faces), no real brand logos or signage. Generic objects and SF scenes are fine.",
+    "Full colour is allowed. The artwork is ONE piece with a hard, clean edge (a rectangle, or a crisp die-cut around the subject); everything outside it is fully transparent. Sharp, well-lit, punchy contrast: it must read clearly when printed on a black shirt. No drop shadow outside the edge, no shirt, no mockup.",
+  ],
+  collage: (style) => [
+    `Style: ${style.prompt}`,
+    "Any photos in it are AI-generated, never real photographs: fictional people only, no real brand logos. Full colour is allowed. The collage is ONE piece with a hard page edge or crisp die-cut outline; everything outside it is fully transparent. No shirt, no mockup.",
+  ],
+  color: (style) => [
+    `Style: ${style.prompt}`,
+    "Full or limited colour as the style demands, bold and print-friendly, strong contrast against a black shirt. Everything outside the artwork is fully transparent; crisp edges. No real brand logos, no real people. No shirt, no mockup.",
+  ],
+};
+const FAMILY_QA = {
+  ink: () => BRAND.qa_checks,
+  photo: () => ["it reads as an intentional photo print: a clear subject, sharp, good contrast, not muddy, noisy or smeared", "the artwork has a clean hard edge (rectangle or die-cut) and nothing is left floating outside it",
+    "no real or recognizable people, no real brand logos or signage", "all text is spelled exactly as required, with no extra, missing or garbled letters", "clean and confident: would a tech-Twitter streetwear account post it"],
+  collage: () => ["it reads as an intentional collage / print with a clear focal point, not a muddy mess", "all text is spelled exactly as required (cut-out letters included), no extra, missing or garbled letters",
+    "a clean page edge or die-cut outline; nothing floating outside it", "no real or recognizable people, no real brand logos", "would a tech-Twitter streetwear account post it"],
+  color: () => ["it reads as a deliberate print in the named style, bold and legible on a black shirt", "all text is spelled exactly as required, with no extra, missing or garbled letters",
+    "crisp edges, no leftover background box unless the style is a page/panel", "no real or recognizable people, no real brand logos", "would a tech-Twitter streetwear account post it"],
+};
+
 export async function generateDesign(args, { openaiKey, outDir, baseUrl, log = () => {} }) {
   const { prompt, text = "", placement = "back" } = args;
+  const styleId = STYLES[args.style] ? args.style : "terminal_lineart";
+  const style = STYLES[styleId], family = style.family;
   // References: always the logo when the brand name or the chest logo is in play; agent can add others.
   let refs = Array.isArray(args.references) ? [...args.references] : [];
   if (!refs.includes("logo") && (/hallucinated/i.test(text + " " + prompt) || placement === "front-chest")) refs.unshift("logo");
@@ -57,12 +94,11 @@ export async function generateDesign(args, { openaiKey, outDir, baseUrl, log = (
   fs.mkdirSync(outDir, { recursive: true });
 
   // 1) GPT Image makes the full graphic
+  if (family !== "ink") refs = refs.filter((r) => r !== "git-reset-back");   // the house line-art reference would drag every style back to line art
   const fullPrompt = [
     `Print-ready t-shirt graphic for the ${placement} of a ${BRAND.shirt}, isolated on a fully transparent background.`,
-    `It prints on a BLACK shirt: every mark (text, shapes, lines) must be a LIGHT, solid, flat color (bone #F2EEE6 by default, eucalyptus #8A9A80 or sand #CBB894 for accents). Never black, dark grey or dark green: dark ink is invisible on the shirt. No box, panel or plate behind the text.`,
-    ...BRAND.art_style.map((r) => `- ${r}`),
-    `Colors limited to: ${PALETTE_TEXT}.`,
-    text ? `The ONLY text in the image must read exactly: "${text}" (same spelling, case and punctuation). ${BRAND.typography}` : "No text at all.",
+    ...FAMILY_ART[family](style),
+    text ? `The ONLY text in the image must read exactly: "${text}" (same spelling, case and punctuation).${family === "ink" ? " " + BRAND.typography : " Every letter crisp and correctly spelled."}` : "No text at all.",
     `Never include: ${BRAND.banned.join("; ")}.`,
     ...refs.map((r, i) => `Reference image ${i + 1}: ${BRAND.references[r].use}`),
     `Design: ${prompt}`,
@@ -83,12 +119,16 @@ export async function generateDesign(args, { openaiKey, outDir, baseUrl, log = (
   // Neutral light ink -> bone. Semi-transparent ink hardened to opaque keeps its dim RGB, so "bone" came out as
   // ~#606060 grey in print files (seen on ba3fd7d6b1f3, Sat 15:40). Grey isn't in the palette, so any low-chroma
   // ink brighter than the knock-out threshold becomes bone #F2EEE6; coloured ink (eucalyptus, rust, sand) is untouched.
+  // Photo, collage and colour styles keep their real colours (dark areas inside a photo are part of the picture):
+  // only the hard alpha edge applies, no knockout and no bone snap.
   let knocked = 0, snapped = 0;
   for (let i = 3; i < data.length; i += 4) {
     data[i] = data[i] >= 128 ? 255 : 0;
-    const r = data[i - 3], g = data[i - 2], b = data[i - 1], hi = Math.max(r, g, b);
-    if (data[i] && hi < 48) { data[i] = 0; knocked++; }
-    else if (data[i] && hi - Math.min(r, g, b) < 24) { data[i - 3] = 242; data[i - 2] = 238; data[i - 1] = 230; snapped++; }
+    if (family === "ink") {
+      const r = data[i - 3], g = data[i - 2], b = data[i - 1], hi = Math.max(r, g, b);
+      if (data[i] && hi < 48) { data[i] = 0; knocked++; }
+      else if (data[i] && hi - Math.min(r, g, b) < 24) { data[i - 3] = 242; data[i - 2] = 238; data[i - 1] = 230; snapped++; }
+    }
     if (!data[i]) clear++;
   }
   const hard = await sharp(data, { raw: { width: info.width, height: info.height, channels: 4 } }).png().toBuffer();
@@ -107,7 +147,7 @@ export async function generateDesign(args, { openaiKey, outDir, baseUrl, log = (
   fs.writeFileSync(path.join(outDir, `${id}-preview.png`), preview);
   const issues = [];
   if (transparentPct > 99) issues.push("almost nothing is visible on the black shirt: the artwork was drawn in black/dark colors; redraw every element in bone #F2EEE6 (light, solid)");
-  if (transparentPct < 15) issues.push(`background is not transparent (only ${transparentPct}% clear): remove any background box or fill`);
+  if (family === "ink" && transparentPct < 15) issues.push(`background is not transparent (only ${transparentPct}% clear): remove any background box or fill`);
   let vision = { pass: true, issues: [], text_seen: "" }, visionModel = null;
   try {
     const v = await withFallback(VISION_MODELS, (model) => openai(openaiKey, "chat/completions", {
@@ -116,9 +156,10 @@ export async function generateDesign(args, { openaiKey, outDir, baseUrl, log = (
         { type: "text", text:
 `You are a strict print QA checker for ${BRAND.name}, a streetwear brand. This is a t-shirt ${placement} graphic shown on a ${BRAND.shirt}.
 Required text: ${text ? `"${text}" — must be spelled EXACTLY, with no extra, missing or garbled characters` : "none — there must be no text"}.
-Brand palette: ${PALETTE_TEXT}. Typography rule: ${BRAND.typography}
+Style asked for: ${style.label} (${family}).${family === "ink" ? ` Brand palette: ${PALETTE_TEXT}. Typography rule: ${BRAND.typography}` : " Full colour and photographic content are intended for this style; judge it as that style."}
 Fail it if any of these is not true:
-${BRAND.qa_checks.map((c, i) => `${i + 1}. ${c}`).join("\n")}
+${FAMILY_QA[family]().map((c, i) => `${i + 1}. ${c}`).join("\n")}
+${bannedLine()}
 How to read this image: WE composited the artwork onto a flat ${BRAND.shirt.replace(/.*\((#[0-9A-Fa-f]+)\).*/, "$1")} fill that stands in for the shirt. That flat fill filling the whole frame is NOT a background box, frame or mockup — never flag it. Only flag a box/frame/mockup if you see a distinct shape inside the image (a rectangle of another shade, a visible edge or border, a drawn shirt).
 Be strict but fair: fail only for definite problems you can see, never for minor shade differences (white vs bone is fine), taste, or things you would merely like to "confirm". Each issue must be a short, specific fix the designer can put in the next prompt.
 Reply JSON only: {"pass": true|false, "issues": ["..."], "text_seen": "exact text you can read", "notes": "one line on what works"}` },
@@ -141,6 +182,8 @@ Reply JSON only: {"pass": true|false, "issues": ["..."], "text_seen": "exact tex
     print_size: `${pw}x${ph}px @300dpi, trimmed to the artwork (aspect ${(ph / pw).toFixed(2)} h/w)`,
     transparent_pct: transparentPct,
     references_used: refs,
+    style: styleId,
+    family,
     image_model: gen.model,
     vision_model: visionModel,
   };

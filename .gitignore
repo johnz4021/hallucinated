@@ -69,3 +69,5 @@ scout-queue.json
 # /hq mission-control publisher (built output + cache)
 hq.json
 hq-cache.json
+design-styles.json
+store-assets.json
