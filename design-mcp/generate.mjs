@@ -54,7 +54,7 @@ async function withFallback(models, fn) {
 const FAMILY_ART = {
   ink: (style) => [
     `It prints on a BLACK shirt: every mark (text, shapes, lines) must be a LIGHT, solid, flat color (bone #F2EEE6 by default, eucalyptus #8A9A80 or sand #CBB894 for accents). Never black, dark grey or dark green: dark ink is invisible on the shirt. No box, panel or plate behind the text.`,
-    ...BRAND.art_style.map((r) => `- ${r}`),
+    ...BRAND.art_style.ink.map((r) => `- ${r}`),
     `Colors limited to: ${PALETTE_TEXT}.`,
     `Style: ${style.prompt}`,
   ],
@@ -73,7 +73,7 @@ const FAMILY_ART = {
   ],
 };
 const FAMILY_QA = {
-  ink: () => BRAND.qa_checks,
+  ink: () => BRAND.qa_checks.ink,
   photo: () => ["it reads as an intentional photo print: a clear subject, sharp, good contrast, not muddy, noisy or smeared", "the artwork has a clean hard edge (rectangle or die-cut) and nothing is left floating outside it",
     "no real or recognizable people, no real brand logos or signage", "all text is spelled exactly as required, with no extra, missing or garbled letters", "clean and confident: would a tech-Twitter streetwear account post it"],
   collage: () => ["it reads as an intentional collage / print with a clear focal point, not a muddy mess", "all text is spelled exactly as required (cut-out letters included), no extra, missing or garbled letters",
@@ -98,7 +98,7 @@ export async function generateDesign(args, { openaiKey, outDir, baseUrl, log = (
   const fullPrompt = [
     `Print-ready t-shirt graphic for the ${placement} of a ${BRAND.shirt}, isolated on a fully transparent background.`,
     ...FAMILY_ART[family](style),
-    text ? `The ONLY text in the image must read exactly: "${text}" (same spelling, case and punctuation).${family === "ink" ? " " + BRAND.typography : " Every letter crisp and correctly spelled."}` : "No text at all.",
+    text ? `The ONLY text in the image must read exactly: "${text}" (same spelling, case and punctuation).${family === "ink" ? " " + BRAND.typography.ink : " Every letter crisp and correctly spelled."}` : "No text at all.",
     `Never include: ${BRAND.banned.join("; ")}.`,
     ...refs.map((r, i) => `Reference image ${i + 1}: ${BRAND.references[r].use}`),
     `Design: ${prompt}`,
@@ -156,7 +156,7 @@ export async function generateDesign(args, { openaiKey, outDir, baseUrl, log = (
         { type: "text", text:
 `You are a strict print QA checker for ${BRAND.name}, a streetwear brand. This is a t-shirt ${placement} graphic shown on a ${BRAND.shirt}.
 Required text: ${text ? `"${text}" — must be spelled EXACTLY, with no extra, missing or garbled characters` : "none — there must be no text"}.
-Style asked for: ${style.label} (${family}).${family === "ink" ? ` Brand palette: ${PALETTE_TEXT}. Typography rule: ${BRAND.typography}` : " Full colour and photographic content are intended for this style; judge it as that style."}
+Style asked for: ${style.label} (${family}).${family === "ink" ? ` Brand palette: ${PALETTE_TEXT}. Typography rule: ${BRAND.typography.ink}` : " Full colour and photographic content are intended for this style; judge it as that style."}
 Fail it if any of these is not true:
 ${FAMILY_QA[family]().map((c, i) => `${i + 1}. ${c}`).join("\n")}
 ${bannedLine()}

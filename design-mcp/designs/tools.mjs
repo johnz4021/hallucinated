@@ -12,15 +12,21 @@ import { txt, err } from "../lib/state.mjs";
 import { stripeClient } from "../stripe/tools.mjs";
 import { flagJohn } from "../agentmail/tools.mjs";
 import { checkProposal, SLUG_RE } from "./guard.mjs";
-import { STYLES, issueStyle, loadStyleLedger } from "./styles.mjs";
+import { STYLES, issueStyle, loadStyleLedger, familyOf } from "./styles.mjs";
 import { loadProposals, saveProposals, updateProposal, newProposalId, proposalsToday, publishesToday, publishedDesign, openProposal, slugTaken, MAX_PROPOSALS_PER_DAY, MAX_PUBLISHES_PER_DAY } from "./ledger.mjs";
 import { publishDesign, storeAdmin, activeProducts, placementOf, STORE, PRICE_CENTS } from "./publish.mjs";
 
+// The design's art style + family, from the proposal (recorded from the QA verdict) or the verdict itself.
+export const styleOf = (p, verdict) => {
+  const style = p.style || verdict?.style || null;
+  return { style, family: p.family || verdict?.family || (style ? familyOf(style) : null), label: STYLES[style]?.label || style || "unknown" };
+};
 export const ceoBrief = (p, verdict) =>
 `Product proposes a new pre-order tee for the store. You decide, alone: approve or reject with ceo_decide. If you approve, it goes on sale as a pre-order ($${PRICE_CENTS / 100}, card saved, charged at launch) automatically.
 proposal_id: ${p.proposal_id}
 Title: ${p.title}   (slug ${p.slug})
 Printed text: ${verdict.text_seen || verdict.args?.text || "(none)"}   Placement: ${placementOf(verdict)}
+Art style: ${styleOf(p, verdict).label} (${styleOf(p, verdict).family || "unknown"} family). The rotation picked it on purpose; judge it by brand.json art_style.all_families + art_style.${styleOf(p, verdict).family || "ink"}, not by another family's rules.
 Pitch: ${p.pitch}
 Why now (Product's trend summary): ${p.trend_summary}
 Sources: ${(p.sources || []).map((s) => `${s.label} <${s.url}>`).join("; ") || "none"}
@@ -32,7 +38,7 @@ Checklist. Reject if ANY fails, and say which:
 2. No real person's name or likeness. No other company's logo, product name or trademark as the joke (generic things like "the cloud", "git", "deploys" are fine).
 3. Nothing about tragedies, disasters, violence, illness or death.
 4. Punches up or at ourselves (tech culture, hype, the grind), never at a group of people.
-5. Clean product: works as a shirt someone would wear in SF; the print text is spelled exactly as intended; on-brand (brand.json voice, palette).
+5. Clean product: works as a shirt someone would wear in SF; the print text is spelled exactly as intended; on-brand FOR ITS STYLE FAMILY (brand.json voice + art_style for the family above). Every family is on-brand: a photo, collage or full-colour design is never off-brand for being a photo, having colour or gradients, or not being flat line art; judge it as that style (legible on black, clean edge, fictional people only).
 6. It's not the same joke as something we already sell.
 Explain your call for the record in 2-4 sentences (what works, the risk, why it ships or doesn't), then call ceo_decide with proposal_id "${p.proposal_id}", decision "approve" or "reject", and that reason. If ceo_decide refuses or publishing fails, say so; don't retry with a different decision.
 End with: RESULT: {"proposal_id":"${p.proposal_id}","decision":"approve|reject","published":true|false,"url":"<or null>"}`;
@@ -94,7 +100,8 @@ export function registerDesignTools(server, ctx) {
       const product = agents.find((x) => x.name === productName), ceo = agents.find((x) => x.name === ceoName);
       if (!ceo) return err(`no ${ceoName} agent; run setup_agents.mjs`);
       const productSession = product ? ((await vv.sessions.list({ agent_id: product.id, limit: 5 }).catch(() => ({ data: [] }))).data || []).find((s) => ["running", "idle", "queued"].includes(s.status))?.id || null : null;
-      const p = { proposal_id, mode: sc.mode, state: "pending", ...a, product_session: productSession, proposed_at: new Date().toISOString() };
+      const st = styleOf({}, verdict);   // from the QA verdict, so it can't drift from what was generated
+      const p = { proposal_id, mode: sc.mode, state: "pending", ...a, style: st.style, family: st.family, product_session: productSession, proposed_at: new Date().toISOString() };
       // Re-read and re-check right before writing, with no await in between: parallel propose_design calls (seen in the
       // first e2e) otherwise each save their own stale copy and one proposal is lost, and the daily cap can be overshot.
       const l2 = loadProposals(ctx.rootDir);

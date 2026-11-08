@@ -8,28 +8,56 @@
     "rust": "#A4442E",
     "sand": "#CBB894"
   },
-  "art_style": [
-    "flat screen-print artwork, solid colors only, crisp hard edges",
-    "no shirt, no mockup, no photo, no frame, no background box",
-    "no drop shadows, no gradients, no glow, no neon",
-    "empty areas must be fully transparent; do not fill shapes with black or dark gray"
-  ],
+  "art_style": {
+    "all_families": [
+      "Every style family below is on-brand: ink (terminal / line art, woodcut, patent drawing), photo (photo box print, halftone photo, flash snapshot), collage (tabloid front page, ransom-note collage, photocopy zine, bootleg rap-tee collage) and color (risograph 2-colour, medieval manuscript, 90s clip art, Y2K chrome). The rotation (next_design_style) picks the style; judge a design against ITS family's rules, never against another family's.",
+      "Always, in every family: it works printed on a black tee (strong contrast, legible from a few feet away); every printed word is spelled exactly as intended, no garbled letters; one clean piece with crisp edges and nothing floating outside it; no shirt or mockup in the file; empty areas fully transparent.",
+      "Palette: ink styles use the brand palette (bone, eucalyptus, sand). Photo, collage and color styles may use full colour; the brand palette is a preference there, not a rule.",
+      "Photos are AI-generated scenes, never real photographs: fictional people only, no real or recognizable faces, no other brands' logos or signage."
+    ],
+    "ink": [
+      "flat screen-print artwork, solid colors only, crisp hard edges",
+      "no shirt, no mockup, no photo, no frame, no background box",
+      "no drop shadows, no gradients, no glow, no neon",
+      "empty areas must be fully transparent; do not fill shapes with black or dark gray"
+    ],
+    "photo": [
+      "an AI-generated photograph is the point: realistic lighting, depth and natural tones are expected, full colour allowed",
+      "one piece with a hard edge (rectangular box print or crisp die-cut); nothing floating outside it",
+      "sharp, well-lit, punchy contrast so it reads on a black shirt; not muddy, noisy or smeared",
+      "an optional short caption in bold type, spelled exactly"
+    ],
+    "collage": [
+      "cut-and-paste look is the point: mixed photos, cut-out letters, halftone, photocopy texture and full colour are all allowed",
+      "a clear focal point, not a muddy mess; a clean page edge or die-cut outline",
+      "cut-out or tabloid lettering is fine, but every word is spelled exactly"
+    ],
+    "color": [
+      "bold full or limited colour as the style demands (riso's two inks, manuscript gold and reds, clip-art rainbows, chrome shine and gradients are all part of these styles)",
+      "crisp edges, strong contrast on a black shirt, legible type"
+    ]
+  },
   "banned": [
     "real people or recognizable faces",
     "real companies, products or their logos",
     "other brands' logos or trade dress",
     "political, sexual or mean-spirited content"
   ],
-  "qa_checks": [
-    "all text is spelled exactly as required, with no extra, missing or garbled letters",
-    "if the logo appears, it matches the reference wordmark (not a different font)",
-    "no leftover background box, frame, shirt or mockup",
-    "colors stay close to the brand palette; no neon, no gradients",
-    "strong contrast and legible on a black shirt",
-    "nothing from the banned list",
-    "clean, minimal, confident: would a tech-Twitter streetwear account post it"
-  ],
-  "typography": "Text is set in a clean typeface: monospace for commands/code (like a terminal), a heavy tight grotesk for headlines. Crisp, evenly spaced, no handwritten or distorted letters.",
+  "qa_checks": {
+    "ink": [
+      "all text is spelled exactly as required, with no extra, missing or garbled letters",
+      "if the logo appears, it matches the reference wordmark (not a different font)",
+      "no leftover background box, frame, shirt or mockup",
+      "colors stay close to the brand palette; no neon, no gradients",
+      "strong contrast and legible on a black shirt",
+      "nothing from the banned list",
+      "clean, minimal, confident: would a tech-Twitter streetwear account post it"
+    ]
+  },
+  "typography": {
+    "ink": "Text is set in a clean typeface: monospace for commands/code (like a terminal), a heavy tight grotesk for headlines. Crisp, evenly spaced, no handwritten or distorted letters.",
+    "photo_collage_color": "Type as the style demands (tabloid headline, ransom-note cut-outs, WordArt, chrome lettering), but every letter crisp and spelled exactly."
+  },
   "references": {
     "logo": {
       "file": "refs/logo.png",
