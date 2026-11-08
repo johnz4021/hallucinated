@@ -13,6 +13,7 @@ import crypto from "node:crypto";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { createClient } from "@usenaive-sdk/vetta";
 import { envKey, readJson, writeJson, readJsonl } from "../lib/state.mjs";
+import { ptDay } from "../designs/ledger.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_ROOT = path.resolve(HERE, "..", "..");
@@ -41,7 +42,7 @@ const KEEP = new Set(["generate_design", "propose_design", "ceo_decide", "x_post
 // args kept per tool (whitelist: checkout args carry the founder's name and the inbox address, so only sizes survive)
 const ARGS = { generate_design: ["text", "placement"], propose_design: ["design_id", "title", "slug"], ceo_decide: ["proposal_id", "decision", "reason"],
   customania_checkout: ["sizes"], customania_handoff_payment: ["amount_due"], courier_book: ["order_number", "max_price_usd", "pickup_time"],
-  courier_quote: ["order_number", "pickup_time"], sales_batch_abort: ["reason"], ops_courier_request: ["order_number"] };
+  courier_quote: ["order_number", "pickup_time"], ad_video_start: ["model"], generate_image: ["model"], sales_batch_abort: ["reason"], ops_courier_request: ["order_number"] };
 
 // ---- privacy ------------------------------------------------------------------------------------------------------
 const URL_RE = /https?:\/\/[^\s"'<>\]]+/g;
@@ -134,45 +135,65 @@ function compact(e) {
   return null;
 }
 
+const is429 = (e) => e?.status === 429 || /429|at capacity|rate limit/i.test(String(e?.message || ""));
+// Gentle on Naïve (it returns 429 "at capacity" under load): agents + deployments cached 5 min, ONE sessions.list per
+// push (more pages only on a cold cache or a burst of new sessions), events only for sessions whose last_seq moved
+// (running ones first, at most 12 a push). Any 429 keeps the last known state.
 async function syncSessions(v, cache) {
-  const agents = ((await withTimeout(v.agents.list({ limit: 100 }), 20_000, "agents.list")).data || []).filter((a) => /^hallucinated-/.test(a.name));
-  const nameOf = Object.fromEntries(agents.map((a) => [a.id, a.name]));
+  const meta = cache.meta ||= { at: 0, agents: [], deployments: [] };
+  if (Date.now() - (meta.at || 0) > 5 * 60_000 || !meta.agents.length) {
+    try {
+      const [ag, dep] = await Promise.all([withTimeout(v.agents.list({ limit: 100 }), 20_000, "agents.list"), withTimeout(v.deployments.list({ limit: 100 }), 20_000, "deployments.list")]);
+      meta.agents = (ag.data || []).filter((a) => /^hallucinated-/.test(a.name)).map((a) => ({ id: a.id, name: a.name }));
+      meta.deployments = (dep.data || []).filter((d) => meta.agents.some((a) => a.id === d.agent_id))
+        .map((d) => ({ id: d.id, agent_id: d.agent_id, cron: d.cron, timezone: d.timezone, enabled: !!d.enabled, schedule_status: d.schedule_status, next_run_at: d.next_run_at }));
+      meta.at = Date.now();
+    } catch (e) { if (!meta.agents.length) throw e; }
+  }
+  const nameOf = Object.fromEntries(meta.agents.map((a) => [a.id, a.name]));
+  const cold = !Object.keys(cache.sessions).some((id) => !SEED_IDS.includes(id));
   const listed = [];
-  await Promise.all(agents.map(async (a) => {
-    let after;
-    for (let page = 0; page < 5; page++) {
-      const r = await withTimeout(v.sessions.list({ agent_id: a.id, limit: 100, ...(after ? { after } : {}) }), 20_000, "sessions.list");
-      const data = r.data || [];
-      listed.push(...data.filter((s) => s.created_at >= CUTOFF));
-      if (!r.has_more || !r.next_cursor || data.some((s) => s.created_at < CUTOFF)) break;
-      after = r.next_cursor;
-    }
-  }));
+  let after;
+  for (let page = 0; page < (cold ? 15 : 5); page++) {
+    const r = await withTimeout(v.sessions.list({ limit: 100, ...(after ? { after } : {}) }), 20_000, "sessions.list");
+    const data = r.data || [];
+    listed.push(...data.filter((s) => s.created_at >= CUTOFF));
+    // stop at the cutoff, or (warm cache) as soon as the page reaches sessions we already know
+    if (!r.has_more || !r.next_cursor || data.some((s) => s.created_at < CUTOFF) || (!cold && data.some((s) => cache.sessions[s.id]))) break;
+    after = r.next_cursor;
+  }
   const have = new Set(listed.map((s) => s.id));
-  const seeds = await Promise.all(SEED_IDS.filter((id) => !have.has(id)).map((id) => withTimeout(v.sessions.get(id), 20_000, "sessions.get").catch(() => null)));
-  const all = [...listed, ...seeds.filter(Boolean)];
+  // seeds once; cached sessions that looked active but fell off the page: re-read a few
+  const stale = Object.values(cache.sessions).filter((c) => !have.has(c.id) && ["running", "queued"].includes(c.status)).slice(0, 3).map((c) => c.id);
+  const extra = await Promise.all([...SEED_IDS.filter((id) => !cache.sessions[id] && !have.has(id)), ...stale].map((id) => withTimeout(v.sessions.get(id), 20_000, "sessions.get").catch(() => null)));
   const todo = [];
-  for (const s of all) {
+  for (const s of [...listed, ...extra.filter(Boolean)]) {
     const agent = nameOf[s.agent_id] || cache.sessions[s.id]?.agent || null;
+    if (!SEED_ROLE[s.id] && !/^hallucinated-/.test(String(agent || ""))) continue;
     const role = SEED_ROLE[s.id] || ROLE[String(agent || "").replace(/^hallucinated-/, "")] || null;
     if (!role) continue;
     const c = cache.sessions[s.id] ||= { id: s.id, last_seq: 0, events: [] };
-    Object.assign(c, { agent, role, created_at: s.created_at, status: s.status, stop_reason: s.stop_reason, spend_micro: s.consumed_micro_usd || 0, server_last_seq: s.last_seq });
+    Object.assign(c, { agent, role, created_at: s.created_at, started_at: s.started_at, status: s.status, stop_reason: s.stop_reason, deployment_id: s.deployment_id || null,
+      spend_micro: s.consumed_micro_usd || 0, server_last_seq: s.last_seq, seen_at: new Date().toISOString() });
     if ((s.last_seq || 0) > c.last_seq) todo.push(c);
   }
-  let fetched = 0;
-  await pool(todo, 4, async (c) => {
+  todo.sort((a, b) => (["running", "queued"].includes(b.status) - ["running", "queued"].includes(a.status)) || String(b.created_at).localeCompare(String(a.created_at)));
+  let fetched = 0, limited = false;
+  await pool(todo.slice(0, 12), 3, async (c) => {
+    if (limited) return;
     let after_seq = c.last_seq, done = false;
-    for (let page = 0; page < 30; page++) {
-      const r = await withTimeout(v.sessions.events(c.id, { after_seq, limit: 100 }), 20_000, "sessions.events");
-      const data = r.data || [];
-      for (const e of data) { const x = compact(e); if (x) c.events.push(x); fetched++; }
-      if (data.length) after_seq = Math.max(after_seq, ...data.map((e) => e.seq));
-      if (!r.has_more || !data.length) { done = true; break; }
-    }
+    try {
+      for (let page = 0; page < 30; page++) {
+        const r = await withTimeout(v.sessions.events(c.id, { after_seq, limit: 100 }), 20_000, "sessions.events");
+        const data = r.data || [];
+        for (const e of data) { const x = compact(e); if (x) c.events.push(x); fetched++; }
+        if (data.length) after_seq = Math.max(after_seq, ...data.map((e) => e.seq));
+        if (!r.has_more || !data.length) { done = true; break; }
+      }
+    } catch (e) { if (is429(e)) limited = true; }
     c.last_seq = done ? Math.max(after_seq, c.server_last_seq || 0) : after_seq;
   });
-  return { sessions: Object.values(cache.sessions), fetched };
+  return { sessions: Object.values(cache.sessions), fetched, limited };
 }
 
 // ---- per-session derivation ----------------------------------------------------------------------------------------
@@ -286,8 +307,171 @@ function deriveSession(c, dry) {
   if (["product", "ceo"].includes(c.role)) { const x = excerptOf(c); if (x) add(c.role, "reasoning", x.text + tag, x.at); }
   const r = resultOf(c);
   const rt = r && resultText(r, c.role);
-  if (rt) add(c.role, "result", `Result: ${rt}${tag}`, r.at);
+  if (rt && !/reviewer$/.test(String(c.agent || ""))) add(c.role, "result", `Result: ${rt}${tag}`, r.at);
   return { items, human, facts, dry, result: r?.json || null, spend: (c.spend_micro || 0) / 1e6 };
+}
+
+// ---- v2: the live agent workspace (agents, flows, money, feed) -------------------------------------------------------
+const AGENTS_V2 = [
+  ["ceo", "CEO", "Sets the plan, approves designs"], ["product", "Product", "Turns trends into shirt designs"],
+  ["creative", "Creative", "Makes the ads"], ["reviewer", "Reviewer", "Checks every ad before posting"],
+  ["growth", "Growth", "Runs the X account"], ["ops", "Ops", "Print orders and courier pickups"], ["support", "Support", "Answers the brand inbox"],
+];
+const NOW_LABEL = {
+  generate_design: "generating a design", trends: "researching trends", x_search: "searching X", propose_design: "proposing a design",
+  ceo_decide: "deciding on a design", get_plan: "reading the plan", set_plan: "setting today's plan", store_stats: "reading the numbers",
+  x_stats: "reading X stats", agents_log: "reading the agents' log", store_catalog: "reading the catalog", generate_image: "generating an image",
+  ad_review: "sending an ad to review", ad_review_status: "waiting for the ad review", ad_submit: "publishing an ad", ad_video_status: "waiting for the video",
+  view_image: "looking at an ad", x_post: "posting on X", x_mentions: "reading mentions", x_reply: "replying to a mention", x_post_scout: "drafting a scout reply",
+  x_browser_reply: "replying on X", growth_next_pillar: "picking the next post", store_link: "getting the store link", store_new_designs: "checking new designs",
+  customania_start: "opening a Customania order", customania_upload: "uploading prints to Customania", customania_place: "placing prints on the tee",
+  customania_checkout: "checking out at Customania", customania_handoff_payment: "handing payment to the founder", customania_payment_status: "waiting for payment",
+  courier_quote: "getting a courier quote", courier_book: "booking a courier", courier_status: "checking the courier", inbox_list: "reading the inbox",
+  inbox_read: "reading an email", inbox_reply: "answering an email", stripe_orders: "reading store orders", sales_batch_start: "batching store orders",
+  flag_john: "flagging the founder", charge_preorders: "charging pre-orders",
+};
+const nowLabel = (n, a = {}) => n === "ad_video_start" ? `generating video${a.model ? ` (${String(a.model).split("/").pop().split("-")[0]})` : ""}` : NOW_LABEL[n] || String(n || "working").replace(/^.*\./, "").replace(/_/g, " ");
+
+function cronTimes(cron) {
+  const [mi, hr, dom, mon, dow] = String(cron || "").trim().split(/\s+/);
+  if (!mi || !hr) return [];
+  const field = (f, max) => {
+    const out = new Set();
+    for (const part of f.split(",")) {
+      const [range, step] = part.split("/"); const st = Number(step || 1);
+      let [a, b] = range === "*" ? [0, max] : range.split("-").map(Number); if (b === undefined) b = step ? max : a;
+      for (let x = a; x <= b; x += st) out.add(x);
+    }
+    return [...out];
+  };
+  const t = []; for (const h of field(hr, 23)) for (const m of field(mi, 59)) t.push(h * 60 + m);
+  void dom; void mon; void dow;
+  return t;
+}
+const hm = (m) => `${Math.floor(m / 60)}:${String(m % 60).padStart(2, "0")}`;
+export function humanSchedule(crons) {
+  const t = [...new Set(crons.flatMap(cronTimes))].sort((a, b) => a - b);
+  if (!t.length) return null;
+  if (t.length === 1) return `daily · ${hm(t[0])}`;
+  const gaps = t.slice(1).map((x, i) => x - t[i]);
+  const g = gaps[0], even = gaps.every((x) => x === g);
+  const every = g < 60 ? `every ${g} min` : g === 60 ? "hourly" : `every ${+(g / 60).toFixed(1)}h`;
+  if (even && t.length * g === 1440) return `${every} · all day`;
+  return `${even ? every : `${t.length}× a day`} · ${hm(t[0])}–${hm(t.at(-1))}`;
+}
+
+function buildV2({ rootDir, cache, sessions, derived, stripe, xl, liveProposals, d1, human, timeline }) {
+  const today = ptDay(new Date());
+  const isToday = (at) => !!at && ptDay(at) === today;
+  const meta = cache.meta || { agents: [], deployments: [] };
+  const ads = readJson(path.join(rootDir, "ads.json"), { ads: {}, reviews: {} });
+  const liveAds = Object.values(ads.ads || {}).filter((a) => !a.test);
+  const liveReviews = Object.values(ads.reviews || {}).filter((r) => !r.test);
+  const plans = (readJson(path.join(rootDir, "plans.json"), { versions: [] }).versions || []).filter((p) => !p.test);
+  const xb = readJson(path.join(rootDir, "x-browser.json"), { replies: [] });
+  const posts = (xl.posts || []).filter((p) => p.kind === "post" && p.id);
+  const replies = (xl.posts || []).filter((p) => (p.kind === "reply" && p.id) || (p.kind === "browser_reply" && !p.dry));
+  const pub = (u) => (typeof u === "string" && /^https:\/\//.test(u) && !/trycloudflare|localhost/.test(u) ? u : null);
+  const notDry = (t) => !/\((dry run|Stripe test orders)\)/.test(t.text || "");
+
+  // things each agent shipped (outside effects), newest last
+  const ship = [];
+  const S = (agent, at, text, url = null, thumb = null) => at && ship.push({ agent, at, text: clip(plain(text), 80), url: pub(url), thumb: pub(thumb) });
+  for (const p of liveProposals) {
+    S("product", p.proposed_at, `Proposed "${p.title}"`, p.publish?.url, p.publish?.mockup_url || cache.art[p.design_id]);
+    if (p.state === "published") S("ceo", p.publish?.published_at || p.decision?.at, `Approved and published "${p.title}"`, p.publish?.url, p.publish?.mockup_url);
+    else if (p.state === "rejected" && p.decision?.at) S("ceo", p.decision.at, `Rejected "${p.title}"`, null, cache.art[p.design_id]);
+  }
+  S("product", d1.stages.designed.at, `Designed drop #1: "${d1.title}"`, d1.stages.live?.url, d1.artwork_url);
+  S("ceo", d1.stages.ceo.at, "Approved drop #1 for print", d1.stages.live?.url, d1.artwork_url);
+  for (const p of plans) S("ceo", p.at, `Set the plan${p.plan?.themes?.length ? ` (${p.plan.themes.length} themes)` : ""}`);
+  for (const a of liveAds) S("creative", a.created_at, `Made ${a.kind === "video" ? "a video" : "an image"} ad${a.format ? ` (${String(a.format).replace(/_/g, " ")})` : ""}`, null, a.kind === "video" ? a.poster_url : a.media_url);
+  const adByReview = Object.fromEntries(Object.values(ads.ads || {}).filter((a) => a.review_id).map((a) => [a.review_id, a]));
+  for (const r of liveReviews.filter((r) => r.done_at)) { const a = adByReview[r.review_id]; S("reviewer", r.done_at, r.pass ? "Passed an ad" : "Sent an ad back", null, a ? (a.kind === "video" ? a.poster_url : a.media_url) : null); }
+  for (const p of posts) S("growth", p.at, p.text || "Posted on X", X_URL(p.id), p.media);
+  for (const p of replies) S("growth", p.at, p.kind === "browser_reply" ? "Replied to a post on X" : "Replied to a mention", p.id ? X_URL(p.id) : null);
+  for (const c of sessions) {
+    const d = derived[c.id];
+    if (!d || d.dry || (c.events || []).some((e) => e.t === "tc" && /cs_test_/.test(e.o))) continue;
+    for (const p of d.facts.paid) S("ops", p.at, `Customania print order ${p.order} placed (founder paid)`);
+    for (const x of d.facts.courier.filter((x) => x.booked)) S("ops", x.at, `Booked a courier pickup to YC${x.price ? ` ($${x.price.toFixed(2)})` : ""}`);
+  }
+  for (const t of timeline.filter((t) => t.agent === "support" && notDry(t) && t.kind === "email")) S("support", t.at, t.text);
+  ship.sort((a, b) => a.at.localeCompare(b.at));
+
+  // agents
+  const byKey = {};
+  for (const c of sessions) { const k = String(c.agent || "").replace(/^hallucinated-/, ""); (byKey[k] ||= []).push(c); }
+  let anyRunning = false;
+  const agents = AGENTS_V2.map(([key, name, role]) => {
+    const agentIds = meta.agents.filter((a) => a.name === `hallucinated-${key}`).map((a) => a.id);
+    const deps = meta.deployments.filter((d) => agentIds.includes(d.agent_id));
+    const ses = (byKey[key] || []).sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
+    const running = ses.find((c) => ["running", "queued"].includes(c.status));
+    const latest = ses[0];
+    const waiting = !running && latest && /awaiting_(approval|answer|input)/.test(latest.stop_reason || "") && Date.now() - Date.parse(latest.created_at) < 6 * 3600_000;
+    const status = running ? "running" : waiting ? "waiting_human" : deps.length && deps.every((d) => !d.enabled) ? "paused" : "idle";
+    if (running) anyRunning = true;
+    let now = null;
+    const lastTool = (c) => {
+      const ev = [...(c.events || [])].sort((a, b) => b.seq - a.seq);
+      const done = new Set(ev.filter((e) => e.t === "tc").map((e) => e.id));
+      const open = ev.find((e) => e.t === "ts" && !done.has(e.id));
+      return open || ev.find((e) => e.t === "ts") || null;
+    };
+    if (running) { const t = lastTool(running); now = clip(t ? nowLabel(t.n, t.a) : "starting up", 60); }
+    else if (waiting) { const cf = [...(latest.events || [])].filter((e) => e.t === "cf").sort((a, b) => b.seq - a.seq)[0]; now = clip(`waiting for the founder${cf ? `: ${nowLabel(cf.n, cf.a)}` : ""}`, 60); }
+    const enabled = deps.filter((d) => d.enabled);
+    const next = enabled.map((d) => d.next_run_at).filter(Boolean).sort()[0] || null;
+    const mine = ship.filter((x) => x.agent === key);
+    const last = mine.at(-1) || null;
+    const prev = ses.find((c) => c !== running);
+    return {
+      key, name, role, status, now,
+      running_since: running ? running.started_at || running.created_at : null,
+      last_run_at: prev ? prev.started_at || prev.created_at : null,
+      next_run_at: next,
+      schedule: deps.length ? humanSchedule((enabled.length ? enabled : deps).map((d) => d.cron)) : key === "reviewer" ? "on demand (every ad)" : "on demand",
+      last_shipped: last ? { at: last.at, text: last.text, url: last.url, thumb: last.thumb } : null,
+      today: { runs: ses.filter((c) => isToday(c.created_at)).length, shipped: mine.filter((x) => isToday(x.at)).length },
+    };
+  });
+
+  // flows
+  const F = (from, to, label, ats) => { const a = ats.filter(Boolean).sort(); return { from, to, label, count_today: a.filter(isToday).length, last_at: a.at(-1) || null }; };
+  const paidCustomania = []; const booked = [];
+  for (const c of sessions) { const d = derived[c.id]; if (!d || d.dry) continue; if (/cs_test_/.test(JSON.stringify(c.events?.filter((e) => e.t === "tc").map((e) => e.o) || []))) continue;
+    paidCustomania.push(...d.facts.paid.map((p) => p.at)); booked.push(...d.facts.courier.filter((x) => x.booked).map((x) => x.at)); }
+  const flows = [
+    F("product", "ceo", "proposals", liveProposals.map((p) => p.proposed_at)),
+    F("ceo", "store", "published", liveProposals.filter((p) => p.state === "published").map((p) => p.publish?.published_at)),
+    F("ceo", "product", "rejected", liveProposals.filter((p) => p.state === "rejected").map((p) => p.decision?.at)),
+    F("creative", "reviewer", "ad reviews", liveReviews.map((r) => r.started_at)),
+    F("reviewer", "growth", "ads passed", liveReviews.filter((r) => r.pass).map((r) => r.done_at)),
+    F("growth", "x", "posts", posts.map((p) => p.at)),
+    F("growth", "x", "replies", replies.map((p) => p.at)),
+    F("store", "ops", "paid orders", (stripe.orders || []).map((o) => o.at)),
+    F("ops", "customania", "print orders", paidCustomania),
+    F("ops", "courier", "pickups", booked),
+    F("ceo", "all", "daily plan", plans.map((p) => p.at)),
+  ];
+
+  // money
+  const sum = (xs) => Math.round(xs.reduce((n, x) => n + x, 0) * 100) / 100;
+  const money = {
+    revenue_usd: sum((stripe.orders || []).map((o) => o.amount_usd)), orders_paid: (stripe.orders || []).length,
+    preorders_count: (stripe.preorders || []).length, preorders_usd: sum((stripe.preorders || []).map((o) => o.amount_usd)),
+    items_live: (stripe.products || []).length, posts_today: posts.filter((p) => isToday(p.at)).length, replies_today: replies.filter((p) => isToday(p.at)).length,
+    agent_spend_today_usd: sum(sessions.filter((c) => isToday(c.created_at)).map((c) => (c.spend_micro || 0) / 1e6)),
+    agent_spend_total_usd: sum(sessions.map((c) => (c.spend_micro || 0) / 1e6)),
+  };
+
+  // feed: what shipped + where the founder stepped in, short
+  const feed = [...ship.map((x) => ({ at: x.at, agent: x.agent, text: x.text, ...(x.url ? { url: x.url } : {}) })),
+    ...human.map((h) => ({ at: h.at, agent: "founder", text: h.text }))]
+    .sort((a, b) => b.at.localeCompare(a.at)).slice(0, 30).map((f) => ({ ...f, text: clip(f.text, 90) }));
+  void xb;
+  return { v2: { money, agents, flows, feed }, anyRunning };
 }
 
 // ---- Stripe (live, read-only) --------------------------------------------------------------------------------------
@@ -497,7 +681,7 @@ export async function buildHq({ rootDir = DEFAULT_ROOT, uploadArt = false, log =
   const humanSorted = human.filter((h) => h.at).sort((a, b) => b.at.localeCompare(a.at));
   const paidOrders = stripe.orders || [];
   const doc = {
-    version: 1, generated_at: new Date().toISOString(),
+    version: 2, generated_at: new Date().toISOString(),
     counters: {
       designs_proposed: designs.length,
       designs_approved: designs.filter((d) => d.stages.ceo?.decision === "approved").length,
@@ -514,27 +698,32 @@ export async function buildHq({ rootDir = DEFAULT_ROOT, uploadArt = false, log =
     timeline: tl.slice(0, 200).map(({ session, ...t }) => t),
     human: humanSorted,
   };
+  const { v2, anyRunning } = buildV2({ rootDir, cache, sessions: naive.sessions, derived, stripe, xl, d1, human: humanSorted, timeline: tl,
+    liveProposals: Object.values(readJson(path.join(rootDir, "design-proposals.json"), { proposals: {} }).proposals || {}).filter((p) => p.mode === "live" && !["abandoned"].includes(p.state)) });
+  Object.assign(doc, v2);
   const clean = scrub(doc);
   const json = JSON.stringify(clean);
   assertClean(json);
   if (json.length > MAX_BYTES) throw new Error(`hq.json is ${json.length} bytes (limit ${MAX_BYTES})`);
   writeJson(cacheFile, cache);
-  return { doc: clean, json, cache, cacheFile, store, warn, fetched: naive.fetched, sessions: naive.sessions.length, ms: Date.now() - t0 };
+  if (naive.limited) warn.push("naive: 429, kept the last known state");
+  return { doc: clean, json, cache, cacheFile, store, warn, anyRunning, fetched: naive.fetched, sessions: naive.sessions.length, ms: Date.now() - t0 };
 }
 
-// serve calls this. Skips the upload when nothing but generated_at changed and the last push is < 5 min old.
+// serve calls this (every 30 s while an agent runs, else 60 s: `running` in the result). Skips the upload when nothing
+// but generated_at changed and the last push is < 5 min old.
 export async function publishHq({ rootDir = DEFAULT_ROOT, dry = false, force = false, log = () => {} } = {}) {
   const b = await buildHq({ rootDir, uploadArt: !dry, log });
   const hash = crypto.createHash("sha256").update(JSON.stringify({ ...b.doc, generated_at: null })).digest("hex");
-  if (dry) { fs.writeFileSync(path.join(rootDir, "hq.json"), JSON.stringify(b.doc, null, 2)); return { dry: true, bytes: b.json.length, events: b.doc.timeline.length, ms: b.ms, fetched: b.fetched, warn: b.warn }; }
+  if (dry) { fs.writeFileSync(path.join(rootDir, "hq.json"), JSON.stringify(b.doc, null, 2)); return { dry: true, running: b.anyRunning, bytes: b.json.length, events: b.doc.timeline.length, ms: b.ms, fetched: b.fetched, warn: b.warn }; }
   if (!b.store) throw new Error("STORE_ADMIN_SECRET is not in .env");
   const last = b.cache.last_push;
-  if (!force && last?.hash === hash && Date.now() - Date.parse(last.at) < 5 * 60_000) return { skipped: true, ms: b.ms, warn: b.warn };
+  if (!force && last?.hash === hash && Date.now() - Date.parse(last.at) < 5 * 60_000) return { skipped: true, running: b.anyRunning, ms: b.ms, warn: b.warn };
   const r = await b.store("PUT", "/api/admin/hq", { json: b.doc });
   const cache = readJson(b.cacheFile, b.cache);
   cache.last_push = { hash, at: new Date().toISOString() };
   writeJson(b.cacheFile, cache);
-  return { pushed: true, bytes: r.bytes ?? b.json.length, events: b.doc.timeline.length, snapshot: r.snapshot ?? null, ms: b.ms, fetched: b.fetched, warn: b.warn };
+  return { pushed: true, running: b.anyRunning, bytes: r.bytes ?? b.json.length, events: b.doc.timeline.length, snapshot: r.snapshot ?? null, ms: b.ms, fetched: b.fetched, warn: b.warn };
 }
 
 // ---- CLI -----------------------------------------------------------------------------------------------------------

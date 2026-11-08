@@ -122,15 +122,16 @@ async function clearHolds() {
 let clearing = false;
 setInterval(async () => { if (clearing) return; clearing = true; try { await clearHolds(); } catch (e) { log("[holds] " + e.message); } finally { clearing = false; } }, 10_000);
 
-// [hq] mission-control publisher (agents/hq_publish.mjs): every 60 s, one run at a time, loaded lazily so a broken
-// publisher can never take serve down. One log line per push or failure; unchanged documents are skipped quietly.
-let hqBusy = false;
-setInterval(async () => {
-  if (hqBusy) return; hqBusy = true;
-  try { const r = await (await import("./hq_publish.mjs")).publishHq({ rootDir: ROOT }); if (r.pushed) log(`[hq] pushed ${r.events} events (${r.bytes} bytes, ${r.ms} ms)`); }
+// [hq] mission-control publisher (agents/hq_publish.mjs): every 30 s while any agent is running, else every 60 s; one run
+// at a time (the next is scheduled only after the previous finishes), loaded lazily so a broken publisher can never take
+// serve down. One log line per push or failure; unchanged documents are skipped quietly.
+let hqRunning = false;
+const hqTick = async () => {
+  try { const r = await (await import("./hq_publish.mjs")).publishHq({ rootDir: ROOT }); hqRunning = !!r.running; if (r.pushed) log(`[hq] pushed ${r.events} events (${r.bytes} bytes, ${r.ms} ms)`); }
   catch (e) { log(`[hq] push failed: ${String(e.message).slice(0, 200)}`); }
-  finally { hqBusy = false; }
-}, 60_000).unref();
+  finally { setTimeout(hqTick, hqRunning ? 30_000 : 60_000).unref(); }
+};
+setTimeout(hqTick, 60_000).unref();
 
 // Spend guard (agents/spend_guard.mjs): Naïve spend since Sat 13:00 PT, checked every 5 min. >= $100: flag John once;
 // >= $175: Creative's video refuses, 1 image + 1 try per concept, flag John. Logs one line per threshold crossed only.
