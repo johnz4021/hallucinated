@@ -211,6 +211,7 @@ function AgentNode({ a, now }: { a: HqAgent; now: number }) {
   ) : null;
   return (
     <article className={`hq2-node status-${a.status ?? "unknown"} agent-${a.key}`} style={{ left: `${n.x}%`, top: `${n.y}%` }}>
+      <Link href={`/hq/agent/${a.key}`} className="hq2-node-link" aria-label={`Open ${a.name ?? a.key}: runs, tools and what it shipped`} />
       <header>
         <span className="hq2-av" aria-hidden="true">{INITIAL[a.key] ?? "?"}</span>
         <h3>{a.name ?? a.key}</h3>
