@@ -30,8 +30,19 @@ process.on("exit", () => releaseLock(LOCK));
 const env = fs.readFileSync(path.join(ROOT, ".env"), "utf8");
 const key = (n) => (env.match(new RegExp(`${n}\\s*=\\s*["']?([^\\s"']+)`)) || [])[1];
 const v = createClient({ baseUrl: "https://api.vetta.sh", apiKey: key("VETTA_API_KEY") });
+// Naïve sometimes answers 429 "the service is at capacity" (hackathon load). Startup used to crash on it: retry instead.
+const naiveRetry = async (label, fn) => {
+  for (let i = 0; ; i++) {
+    try { return await fn(); }
+    catch (e) {
+      if (e?.status !== 429 || i >= 40) throw e;
+      const s = Math.min(5 + i * 5, 30); log(`[naive] ${label}: at capacity, retrying in ${s} s`); await sleep(s * 1000);
+    }
+  }
+};
 
-let identity = ((await v.identities.list({ limit: 50 })).data || []).find((i) => /hallucinated/i.test(i.name));
+
+let identity = ((await naiveRetry("identities list", () => v.identities.list({ limit: 50 }))).data || []).find((i) => /hallucinated/i.test(i.name));
 if (!identity) { identity = await v.identities.create({ name: "Hallucinated", description: "Agent-run streetwear brand" }); log(`created identity ${identity.id}`); }
 
 const token = crypto.randomBytes(16).toString("hex");
@@ -46,6 +57,7 @@ log(`== serve: MCP server on port ${PORT}`);
 if (process.platform === "darwin") spawn("caffeinate", ["-dimsu", "-w", String(process.pid)], { stdio: "ignore", detached: true }).unref();
 if (!fs.existsSync(bin)) await install(bin);
 
+
 let tunnel = null, url = null;
 async function openTunnel() {
   tunnel = Tunnel.quick(`http://localhost:${PORT}`);
@@ -55,11 +67,11 @@ async function openTunnel() {
   // the bearer token lives in a Naïve vault credential bound to this URL (Naïve forbids auth headers in mcp_servers)
   const vl = await v.vaults.list().catch(() => ({ data: [] }));
   for (const o of (vl.data || []).filter((x) => x.display_name === "hallucinated-mcp")) await v.vaults.delete(o.id).catch(() => {});
-  const vault = await v.vaults.create({ display_name: "hallucinated-mcp" });
-  await v.vaults.credentials.create(vault.id, { kind: "static_bearer", key: "hallucinated_mcp_token", value: token, mcp_server_url: url + "/mcp" });
+  const vault = await naiveRetry("vault create", () => v.vaults.create({ display_name: "hallucinated-mcp" }));
+  await naiveRetry("vault credential", () => v.vaults.credentials.create(vault.id, { kind: "static_bearer", key: "hallucinated_mcp_token", value: token, mcp_server_url: url + "/mcp" }));
   // repoint every hallucinated-* agent
-  const agents = ((await v.agents.list({ limit: 100 })).data || []).filter((a) => /^hallucinated-/.test(a.name));
-  for (const a of agents) await v.agents.update(a.id, { mcp_servers: [{ name: "hallucinated", url: url + "/mcp" }] }).catch((e) => log(`repoint ${a.name}: ${e.message}`));
+  const agents = ((await naiveRetry("agents list", () => v.agents.list({ limit: 100 }))).data || []).filter((a) => /^hallucinated-/.test(a.name));
+  for (const a of agents) await naiveRetry(`repoint ${a.name}`, () => v.agents.update(a.id, { mcp_servers: [{ name: "hallucinated", url: url + "/mcp" }] })).catch((e) => log(`repoint ${a.name}: ${e.message}`));
   fs.writeFileSync(STATE, JSON.stringify({ url, port: PORT, pid: process.pid, started: new Date().toISOString() }, null, 2));
   log(`tools live at ${url} (repointed ${agents.length} agents: ${agents.map((a) => a.name).join(", ") || "none yet"})`);
   await syncDeployments().catch((e) => log("deployment sync: " + e.message));
@@ -75,7 +87,7 @@ setInterval(async () => {
 
 // A deployment pinned to an agent version keeps firing that version (with its old tunnel URL); move pins to the latest.
 async function syncDeployments() {
-  const agents = ((await v.agents.list({ limit: 100 })).data || []).filter((a) => /^hallucinated-/.test(a.name));
+  const agents = ((await naiveRetry("agents list", () => v.agents.list({ limit: 100 }))).data || []).filter((a) => /^hallucinated-/.test(a.name));
   const byId = Object.fromEntries(agents.map((a) => [a.id, a]));
   const deps = ((await v.deployments.list({ limit: 100 })).data || []).filter((d) => byId[d.agent_id]);
   for (const d of deps) if (d.agent_version != null && d.agent_version !== byId[d.agent_id].current_version)
