@@ -75,7 +75,7 @@ const DESIGN_RULES = "Hard lines (John's; also checked in code): no slurs and no
 // Creative's media models (Naïve generate_image / generate_video built-ins); view_image stays off for GLM agents.
 export const IMAGE_MODELS = ["google/gemini-3-pro-image", "openai/gpt-image-2", "black-forest-labs/flux.2-max"];
 export const REVIEWER_MODEL = process.env.REVIEWER_MODEL || "google/gemini-3-flash-preview";   // probed: sees images via view_image, ~$0.015 per review
-const NO_MONEY = "Never spend or promise money. Anything about money, refunds, complaints, legal or that you're unsure about goes to flag_john.";
+const NO_MONEY = "Never state a price from memory: prices change, so quote only what store_catalog (price), store_link or another tool shows right now. Never spend or promise money. Anything about money, refunds, complaints, legal or that you're unsure about goes to flag_john.";
 
 export function agentDefs({ live = false, trendsAllow = false } = {}) {
   return {

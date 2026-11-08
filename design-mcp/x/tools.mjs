@@ -112,7 +112,9 @@ export function storeInfo(rootDir) {
   const s = readJson(path.join(rootDir, "store.json"), null);
   const url = s && (s.url || s.store_url);
   if (!url || !/^https:\/\//.test(url)) return { available: false };
-  return { available: true, url, mode: s.mode || null, price: s.unit_amount != null ? `$${(s.unit_amount / 100).toFixed(0)}` : s.price || null,
+  // store.json's unit_amount is the drop-1 tee's; products differ (agent tees are $38), so it's labelled, not "the" price
+  return { available: true, url, mode: s.mode || null, drop_1_tee_price: s.unit_amount != null ? `$${(s.unit_amount / 100).toFixed(0)}` : s.price || null,
+    prices_note: "each product has its own price: use the price in store_catalog / growth_next_pillar material / store_new_designs; never quote one from memory",
     product: s.product?.name || null, sizes: s.product?.sizes || null, max_quantity: s.max_quantity || null, fulfilment: s.fulfilment || null,
     ...(s.mode === "test" ? { note: "store is in Stripe TEST mode: real cards are not charged yet" } : {}) };
 }

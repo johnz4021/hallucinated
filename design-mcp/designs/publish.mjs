@@ -3,7 +3,7 @@
 //   2. images: [back mockup, FRONT mockup with the Hallucinated chest wordmark, flat]. Every agent shirt is two-sided: the
 //      front is always our wordmark (brand/hallucinated-logo-black-tee-chest-4in-300dpi.png, uploaded once, URL cached),
 //      the back is the agent's design. Metadata front=wordmark. backfillFront() brings older products up to this.
-//   3. Stripe product (status=preorder, origin=agents, drop=agents, ...) + one $65 price per S/M/L/XL, lookup key <slug>-<size>
+//   3. Stripe product (status=preorder, origin=agents, drop=agents, ...) + one price per S/M/L/XL (DESIGN_PRICE_USD, default $38), lookup key <slug>-<size>
 //   4. dossier: PATCH /api/admin/content collection "designs"
 //   5. POST /api/revalidate {"what":"all"}
 // Uses whichever Stripe mode stripeClient picked (sandbox unless STRIPE_LIVE_OK=1). Every Stripe create has an
@@ -17,7 +17,8 @@ import { envKey, readJson, writeJson } from "../lib/state.mjs";
 
 export const STORE = "https://hallucinated-store.vercel.app";
 export const SIZES = ["S", "M", "L", "XL"];
-export const PRICE_CENTS = 6500;
+// Agent-designed tee price (John, Sat 18:0x: $65 -> $38). Existing tees are moved with designs/reprice.mjs.
+export const PRICE_CENTS = Math.round(Number(process.env.DESIGN_PRICE_USD || 38) * 100);
 export const placementOf = (verdict) => (verdict?.args?.placement === "front-chest" ? "front" : "back");
 const clip = (s, n) => String(s || "").slice(0, n);
 
@@ -117,7 +118,7 @@ export async function publishDesign({ rootDir, sc, admin, proposal: p, outDir, l
     const pb = priceBody(p, prod.id, size);
     const found = ((await sc.call("GET", `/prices?${new URLSearchParams({ "lookup_keys[]": pb.lookup_key, limit: "1" })}`)).data || [])[0];
     price_ids[size] = found && found.active && found.product === prod.id && found.unit_amount === PRICE_CENTS ? found.id
-      : (await sc.call("POST", "/prices", pb, { idempotencyKey: `design-price-${p.proposal_id}-${size}` })).id;
+      : (await sc.call("POST", "/prices", pb, { idempotencyKey: `design-price-${p.proposal_id}-${size}-${PRICE_CENTS}` })).id;
   }
   log(`[publish] ${p.slug}: ${sc.mode} product ${prod.id}, prices ${Object.values(price_ids).join(", ")}`);
   // 4. dossier (409 = someone else wrote first: retry)

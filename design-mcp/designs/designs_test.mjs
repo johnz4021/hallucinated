@@ -101,7 +101,7 @@ assert.ok(prod.marketing_features.some((f) => f.name === FRONT_FEATURE));
 assert.equal(sc.prices.length, 4);
 for (const [i, size] of ["S", "M", "L", "XL"].entries()) {
   const pr = sc.prices[i];
-  assert.equal(pr.lookup_key, `merge-conflict-tee-${size.toLowerCase()}`); assert.equal(pr.unit_amount, 6500); assert.equal(pr.currency, "usd"); assert.equal(pr.transfer_lookup_key, "true");
+  assert.equal(pr.lookup_key, `merge-conflict-tee-${size.toLowerCase()}`); assert.equal(pr.unit_amount, 3800); assert.equal(pr.currency, "usd"); assert.equal(pr.transfer_lookup_key, "true");
   assert.deepEqual(pr.metadata, { size, design_id: "bc1dbe9d9aae", garment: "tee", color: "black", drop: "agents", slug: "merge-conflict-tee", origin: "agents" });
 }
 const dz = admin.designs["merge-conflict-tee"];
