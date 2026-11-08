@@ -20,7 +20,7 @@ function siteOrigin(req: Request) {
 const bad = (error: string, status = 400) => NextResponse.json({ error }, { status });
 
 export async function POST(req: Request) {
-  let body: { items?: unknown; fulfilment?: unknown };
+  let body: { items?: unknown; fulfilment?: unknown; client?: unknown };
   try {
     body = await req.json();
   } catch {
@@ -100,8 +100,11 @@ export async function POST(req: Request) {
         },
       });
     } else {
-      const fulfilment = body.fulfilment === "ship" || body.fulfilment === "pickup" ? body.fulfilment : null;
-      if (!fulfilment) return bad("Choose shipping or pickup in your bag first.");
+      const chosen = body.fulfilment === "ship" || body.fulfilment === "pickup" ? body.fulfilment : null;
+      // Current bags (client >= 2) always send a choice; ask for it. A tab still running an older bundle
+      // can't show the choice, so don't dead-end it: take the order and ask by email before charging.
+      if (!chosen && Number(body.client ?? 0) >= 2) return bad("Choose shipping or pickup in your bag first.");
+      const fulfilment: "ship" | "pickup" | "ask" = chosen ?? "ask";
       const total = lines.reduce((s, l) => s + l.price.unit_amount! * l.quantity, 0);
       const shipCents = fulfilment === "ship" && total < config.shipping.free_threshold ? config.shipping.rates.ship.amount : 0;
       const windows = datedWindows(lines.map((l) => l.product.metadata.launch_window));
@@ -132,13 +135,15 @@ export async function POST(req: Request) {
           shipping_address: {
             message: fulfilment === "pickup"
               ? "You chose pickup in SF. Stripe still asks for an address; we only use it if we ship."
-              : "Where we ship it when it launches.",
+              : fulfilment === "ask"
+                ? "We'll email before launch to ask: ship here, or pick up in SF."
+                : "Where we ship it when it launches.",
           },
           submit: {
             message:
               `${lines.every((l) => l.product.metadata.origin === "agents") ? "Designed by the agents. " : ""}` +
               `Pre-order: ${what}. You'll be charged ${formatPrice(total)}` +
-              `${shipCents ? ` + ${formatPrice(shipCents)} shipping` : fulfilment === "ship" ? " (free shipping)" : " (free SF pickup)"} only if it launches` +
+              `${shipCents ? ` + ${formatPrice(shipCents)} shipping` : fulfilment === "ship" ? " (free shipping)" : fulfilment === "pickup" ? " (free SF pickup)" : ""} only if it launches` +
               `${windows ? ` (est. ${windows})` : ""}. If it never launches, you're never charged. ` +
               `Cancel any time before launch: email ${config.contactEmail}.`,
           },

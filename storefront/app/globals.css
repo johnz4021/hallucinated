@@ -567,3 +567,6 @@ details > p, details > table { margin: 0 0 16px; }
 .fulfil-choice input { margin-top: 3px; accent-color: var(--sand); width: 18px; height: 18px; }
 .fulfil-choice span { display: grid; gap: 2px; }
 .fulfil-choice small { color: rgba(242, 238, 230, 0.8); font-size: 14px; }
+.bag-notes { border: 1.5px solid var(--sand); border-radius: 4px; padding: 10px 12px; font-size: 14px; }
+.bag-notes p { margin: 0 0 4px; font-weight: 600; }
+.bag-notes ul { margin: 0; padding-left: 18px; }

@@ -27,6 +27,8 @@ type Cart = {
   setQty: (priceId: string, qty: number) => void;
   remove: (priceId: string) => void;
   clear: () => void;
+  /** Bring the bag in line with Stripe (kind, price, archived prices). Returns human-readable changes. */
+  reconcile: () => Promise<string[]>;
 };
 
 const KEY = "hallucinated.cart.v1";
@@ -41,7 +43,13 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     try {
       const saved = JSON.parse(localStorage.getItem(KEY) ?? "[]");
-      if (Array.isArray(saved)) setLines(saved);
+      if (Array.isArray(saved)) {
+        setLines(
+          saved
+            .filter((l) => l && typeof l.priceId === "string" && typeof l.qty === "number")
+            .map((l) => ({ ...l, kind: l.kind === "preorder" ? "preorder" : "live" })),
+        );
+      }
     } catch {}
     setReady(true);
   }, []);
@@ -71,6 +79,42 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
   const remove = useCallback((priceId: string) => setLines((cur) => cur.filter((l) => l.priceId !== priceId)), []);
   const clear = useCallback(() => setLines([]), []);
 
+  // The bag lives in localStorage, so it can outlive a price change, a status change (pre-order <-> buy now)
+  // or a whole deploy. Stripe is the truth: re-check every line and fix the bag before checkout.
+  const reconcile = useCallback(async (): Promise<string[]> => {
+    const current = lines;
+    if (!current.length) return [];
+    const res = await fetch("/api/cart/check", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ price_ids: current.map((l) => l.priceId) }),
+    }).catch(() => null);
+    if (!res?.ok) return [];
+    const { lines: checked } = (await res.json()) as {
+      lines: ({ price_id: string; ok: true; replaced_by?: string; kind: Kind; unit_amount: number; name: string; launch_window: string | null } | { price_id: string; ok: false })[];
+    };
+    const notes: string[] = [];
+    const next: CartLine[] = [];
+    for (const l of current) {
+      const c = checked.find((x) => x.price_id === l.priceId);
+      if (!c) { next.push(l); continue; }
+      if (!c.ok) { notes.push(`${l.name} (${l.size}) is no longer available, so we took it out.`); continue; }
+      if (c.unit_amount !== l.unitAmount) notes.push(`${c.name} is now ${money(c.unit_amount)}.`);
+      if (c.kind !== l.kind) notes.push(c.kind === "preorder" ? `${c.name} is a pre-order now.` : `${c.name} is in stock now.`);
+      next.push({ ...l, priceId: c.replaced_by ?? l.priceId, unitAmount: c.unit_amount, kind: c.kind, name: c.name, launchWindow: c.launch_window });
+    }
+    // Merge duplicates created by a replaced price id.
+    const merged: CartLine[] = [];
+    for (const l of next) {
+      const m = merged.find((x) => x.priceId === l.priceId);
+      if (m) m.qty = Math.min(MAX_QTY, m.qty + l.qty);
+      else merged.push({ ...l });
+    }
+    const changed = JSON.stringify(merged) !== JSON.stringify(current);
+    if (changed) setLines(merged);
+    return notes;
+  }, [lines]);
+
   const value = useMemo<Cart>(
     () => ({
       lines,
@@ -82,8 +126,9 @@ export function CartProvider({ children }: { children: React.ReactNode }) {
       setQty,
       remove,
       clear,
+      reconcile,
     }),
-    [lines, kind, ready, add, setQty, remove, clear],
+    [lines, kind, ready, add, setQty, remove, clear, reconcile],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

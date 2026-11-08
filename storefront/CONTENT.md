@@ -133,7 +133,7 @@ List completed Checkout Sessions (`GET /v1/checkout/sessions?status=complete&cre
 ### 3.2 Pre-orders: `mode=setup`, `metadata.kind="preorder"`
 - `metadata.preorder_items`: a JSON string, `[{"price_id":"price_…","qty":1}, …]`. Look each price up for size, design and garment.
 - `metadata.preorder_total`: the item total to charge at launch, in cents.
-- `metadata.fulfilment`: `ship` or `pickup`, chosen in the bag before checkout (sessions from before this change don't have it: ask the buyer).
+- `metadata.fulfilment`: `ship` or `pickup`, chosen in the bag before checkout. `ask` means the buyer's browser was running an older version of the site without the choice: email them before charging. Sessions from before this change have no `fulfilment` at all: ask as well.
 - `metadata.preorder_shipping`: shipping in cents to add at launch: 600 when `fulfilment=ship` and the item total is under $75, else 0 (the config rule at the time of the order). Charge `preorder_total + preorder_shipping`.
 - The shipping address is collected in Checkout for every pre-order (Stripe can't make it optional for pickup). In setup mode Stripe saves it on the **Customer** (`customer.shipping`), not on the session. It stays in Stripe; never read or copy it. Whether one exists is enough for the agents. `metadata.currency` is `usd`. `metadata.launch_window` and `metadata.drop` are also set.
 - **Customer:** `customer` (always created), plus `customer_details.email` and `.name`.
@@ -387,3 +387,22 @@ curl -s -X PATCH $STORE/api/admin/content -H "Authorization: Bearer $STORE_ADMIN
 - **Remove:** `{"op":"remove","collection":"launches","id":"<slug>"}`
 - **Visibility:** a launch shows only when its slug is an active product in that deployment's own Stripe catalog (so sandbox tests stay off production), and not `test` in production.
 - Every write revalidates the site, so no separate call is needed.
+
+---
+
+## 7. Pre-promotion checklist (storefront)
+
+Run these against the **preview URL** (test key) before every promotion; all must pass.
+
+```bash
+cd storefront
+npx tsc --noEmit && npm run build:local                      # types + production build
+VERCEL_OIDC=1 node scripts/test-flows.mjs <preview-url>       # click-through: product -> bag -> choice -> Checkout opens
+PLAN=single VERCEL_OIDC=1 node scripts/test-checkout.mjs <preview-url> order       # pays with 4242, checks shipping
+PLAN=single SHIP=ship VERCEL_OIDC=1 node scripts/test-checkout.mjs <preview-url> preorder   # saves a card, checks fulfilment
+VERCEL_OIDC=1 node scripts/screenshot.mjs <preview-url> test-output/shots "/,/shop,/p/<slug>"   # look at them (1440 + 390 px)
+```
+- `test-flows.mjs` covers: buy-now tee (no choice in the bag; Stripe asks), pre-order cap (choice shown, ship), the newest agent tee (choice, pickup), a **stale bag** (archived price + wrong kind in localStorage gets corrected before checkout), and an **old-client** API call without a choice (accepted as `fulfilment: "ask"`; a current client gets 400).
+- Any change to what `/api/checkout` requires must stay backward compatible: tabs opened before a deploy keep running the old bundle and call the new API.
+- `VERCEL_OIDC=1` uses the linked project's short-lived development token from `storefront/.env.local` (refresh: `npx vercel@latest env pull .env.local --yes`), sent only to the store's own origin.
+
