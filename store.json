@@ -72,7 +72,7 @@
     "drop_alerts": "Stripe Customers with metadata.drop_alerts = 'yes'",
     "mixed_carts": "not allowed: each session is exactly one kind"
   },
-  "updated_at": "2026-11-07T22:16:06.123229Z",
+  "updated_at": "2026-11-08T01:33:02.362838Z",
   "stripe_account": "acct_1UZH4bBATDgdYzwt",
   "products": [
     {
@@ -82,13 +82,13 @@
       "garment": "tee",
       "color": "black",
       "drop": "drop-1",
-      "unit_amount": 6500,
+      "unit_amount": 3800,
       "product_id": "prod_VaSodvDZGjT6xL",
       "prices": {
-        "S": "price_1UZHsTBATDgdYzwtqvTGFe44",
-        "M": "price_1UZHsTBATDgdYzwtaLRlVMb0",
-        "L": "price_1UZHsTBATDgdYzwtui5jec79",
-        "XL": "price_1UZHsTBATDgdYzwthFCCVgPt"
+        "S": "price_1UZKxgBATDgdYzwti7RzxphJ",
+        "M": "price_1UZKxgBATDgdYzwtP5MYF1mR",
+        "L": "price_1UZKxgBATDgdYzwt4xRF6Dh8",
+        "XL": "price_1UZKxgBATDgdYzwt5lCJymkn"
       }
     },
     {
@@ -96,13 +96,13 @@
       "status": "preorder",
       "launch_window": "Dec 2026",
       "drop": "drop-2",
-      "unit_amount": 9500,
+      "unit_amount": 6500,
       "product_id": "prod_VaSoro9LRf1CnQ",
       "prices": {
-        "S": "price_1UZHsUBATDgdYzwtbU75JuUm",
-        "M": "price_1UZHsUBATDgdYzwtIWkKQblo",
-        "L": "price_1UZHsUBATDgdYzwtjVoH7uSI",
-        "XL": "price_1UZHsUBATDgdYzwtbc8aPNZp"
+        "S": "price_1UZKxiBATDgdYzwtWp4ESwuw",
+        "M": "price_1UZKxiBATDgdYzwtFtXZ9uWh",
+        "L": "price_1UZKxiBATDgdYzwteykwq8DL",
+        "XL": "price_1UZKxiBATDgdYzwtaTGOpQdg"
       }
     },
     {
@@ -110,10 +110,10 @@
       "status": "preorder",
       "launch_window": "Dec 2026",
       "drop": "drop-2",
-      "unit_amount": 4000,
+      "unit_amount": 2800,
       "product_id": "prod_VaSo4o3Hfz0G5L",
       "prices": {
-        "OS": "price_1UZHsVBATDgdYzwtfwbOnuL3"
+        "OS": "price_1UZKxkBATDgdYzwtpg7w1lHm"
       }
     },
     {
@@ -121,10 +121,10 @@
       "status": "preorder",
       "launch_window": "Dec 2026",
       "drop": "drop-2",
-      "unit_amount": 3000,
+      "unit_amount": 2000,
       "product_id": "prod_VaSokhZs6b4xib",
       "prices": {
-        "OS": "price_1UZHsVBATDgdYzwtCrJyZkS4"
+        "OS": "price_1UZKxkBATDgdYzwtkBqbQ39H"
       }
     },
     {
@@ -132,13 +132,13 @@
       "status": "preorder",
       "launch_window": "Dec 2026",
       "drop": "drop-2",
-      "unit_amount": 6500,
+      "unit_amount": 3800,
       "product_id": "prod_VaSoydRkxg1tcn",
       "prices": {
-        "S": "price_1UZHsWBATDgdYzwtauKt5fB8",
-        "M": "price_1UZHsWBATDgdYzwtidPOnWeF",
-        "L": "price_1UZHsWBATDgdYzwtVC7EpyyK",
-        "XL": "price_1UZHsWBATDgdYzwtYdfy7eKL"
+        "S": "price_1UZKxlBATDgdYzwt6vsbnw5R",
+        "M": "price_1UZKxlBATDgdYzwtjhFBi1Di",
+        "L": "price_1UZKxmBATDgdYzwtxveetyWJ",
+        "XL": "price_1UZKxmBATDgdYzwtZ3JRpbOt"
       }
     }
   ],
@@ -227,5 +227,5 @@
     "url_note": "Production serves the phase-1 single-shirt page (being switched to live mode by the lead) until the phase-2 preview is promoted.",
     "note": "Stripe sandbox acct (test mode) used for previews and the e2e fixtures"
   },
-  "unit_amount": 6500
+  "unit_amount": 3800
 }
