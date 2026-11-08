@@ -150,6 +150,14 @@ const GROWTH_RUN =
    - The rest (or the best one too, if x_browser_reply refused it): draft with x_post_scout (mode reply or quote, one-line why) for John to post by hand. Never reply to strangers any other way.
 End with: RESULT: {"replies":<n>,"pillar":"<pillar>","posted":"<post id or none>","announced":"<slug or none>","browser_reply":"<reply url, dry, refused: why, or none>","scout_drafts":<n>}`;
 
+// The reply-only Growth run (deployment growth-reply): no x_post, no scout queue, no mentions.
+const GROWTH_REPLY_RUN =
+`Scheduled reply run: exactly ONE browser reply, nothing else (no x_post, no x_post_scout, no x_mentions).
+1. x_search once or twice for fresh, top-level posts where SF tech / AI / startup people joke or groan about their work (e.g. '"vibe coding" -is:retweet -is:reply lang:en', '"AI agents" (shipped OR prod OR deploy) -is:retweet -is:reply lang:en'). Skip engagement bait ("let's connect", "drop your startup", giveaways, follow-for-follow), giant viral threads, anything about a real tragedy, and anything you can't add a genuine laugh to.
+2. Pick the single best post and call x_browser_reply once: target_url = its url from x_search, text = one dry, witty line in brand voice that adds to their joke (max 240 characters, no links, no hashtags, no @-mentions, never a real person's name, don't sell), why = one line.
+3. If x_browser_reply refuses (too soon, daily cap, paused, off-topic, already replied to that person) or says stopped, don't retry with another post and don't flag anything: just end.
+End with: RESULT: {"browser_reply":"<reply url, or refused: reason>"}`;
+
 export const TIMEZONE = "America/Los_Angeles";
 export function scheduleDefs() {
   const d1 = DROPS["drop-1"];
@@ -157,6 +165,9 @@ export function scheduleDefs() {
     // Growth every 1.5 h, 08:20-23:20 PT: cron can't say "90 min", so two deployments interleave (8:20, 9:50, 11:20, ... 23:20)
     { key: "growth", agent: "growth", cron: "20 8-23/3 * * *", budget_micro_usd: 1_500_000, label: "Growth A: replies + 1 rotated post + scout (08:20, 11:20, ... 23:20)", input_template: GROWTH_RUN },
     { key: "growth-b", agent: "growth", cron: "50 9-23/3 * * *", budget_micro_usd: 1_500_000, label: "Growth B: same run, interleaved (09:50, 12:50, ... 21:50)", input_template: GROWTH_RUN },
+    // John, Sat 19:00: 2 browser replies an hour. A reply-only run at :05 and :35 (clear of the :20/:50 Growth runs); the
+    // 25-min gap (X_BROWSER_MIN_GAP_MIN) and the daily cap in x_browser_reply handle collisions. Created paused.
+    { key: "growth-reply", agent: "growth", cron: "5,35 * * * *", budget_micro_usd: 400_000, label: "Growth reply: one browser reply to a fresh on-topic post (:05, :35)", input_template: GROWTH_REPLY_RUN },
     { key: "ceo", agent: "ceo", cron: "0 9 * * *", budget_micro_usd: 1_000_000, label: "CEO: morning numbers -> today's plan, 09:00",
       input_template:
 `Morning run. You set today's plan for Product, Creative and Growth.
