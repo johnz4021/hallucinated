@@ -16,5 +16,6 @@ export STRIPE_LIVE_OK=1   # store is live (Sat 14:25): agents read STRIPE_LIVE_S
 export DESIGN_MAX_PROPOSALS_PER_DAY=24 DESIGN_MAX_PUBLISHES_PER_DAY=24   # John Sat 17:50: a drop every hour
 export ADS_MAX_IMAGES_PER_DAY=10 ADS_MAX_VIDEOS_PER_DAY=5   # John Sat 17:40: focus Growth on ads
 export X_BROWSER_START_HOUR=0 X_BROWSER_END_HOUR=24   # John Sat 17:47: no time-of-day window for browser replies
+export X_BROWSER_MIN_GAP_MIN=25 X_BROWSER_MAX_PER_DAY=48   # John Sat 19:05: 2 browser replies per hour
 pkill -f "agents/serve.mjs" 2>/dev/null; sleep 1
 node agents/serve.mjs
