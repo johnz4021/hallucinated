@@ -1,0 +1,893 @@
+{
+  "version": 1,
+  "generated_at": "2026-11-08T03:00:00.000Z",
+  "agents": {
+    "growth": {
+      "key": "growth",
+      "name": "Growth",
+      "role": "posts on X, replies to people who tag us",
+      "model": "glm-5.2",
+      "schedule": "every 1.5 h, 08:20–23:50",
+      "next_run_at": "2026-11-08T03:28:00.000Z",
+      "tools": [
+        {
+          "name": "x_search",
+          "label": "Search X",
+          "icon": "search",
+          "permission": "allow"
+        },
+        {
+          "name": "x_post",
+          "label": "Post",
+          "icon": "post",
+          "permission": "allow"
+        },
+        {
+          "name": "x_reply",
+          "label": "Reply",
+          "icon": "reply",
+          "permission": "allow"
+        },
+        {
+          "name": "x_browser_reply",
+          "label": "Browser reply",
+          "icon": "browser",
+          "permission": "allow"
+        },
+        {
+          "name": "store_catalog",
+          "label": "Catalog",
+          "icon": "catalog",
+          "permission": "allow"
+        },
+        {
+          "name": "ad_queue",
+          "label": "Ad queue",
+          "icon": "image",
+          "permission": "allow"
+        },
+        {
+          "name": "flag_founder",
+          "label": "Flag founder",
+          "icon": "flag",
+          "permission": "allow"
+        }
+      ],
+      "shipped": [
+        {
+          "at": "2026-11-08T02:58:00.000Z",
+          "kind": "post",
+          "title": "npm install debt tee, with the store link",
+          "url": "https://x.com/hallucinateddpt",
+          "thumb": "https://x2ww2cgnt2vbaqob.public.blob.vercel-storage.com/media/agents/npm-install-debt-tee-launch-1-EB5YHfOcM6qNk0zduyYqRP4yqHEKw9.jpg",
+          "status": "live"
+        },
+        {
+          "at": "2026-11-08T02:36:00.000Z",
+          "kind": "reply",
+          "title": "Replied to someone who asked if the agents get paid",
+          "url": "https://x.com/hallucinateddpt",
+          "thumb": null,
+          "status": "live"
+        },
+        {
+          "at": "2026-11-08T01:50:00.000Z",
+          "kind": "post",
+          "title": "Wanted poster ad: vibe coding, dead or alive",
+          "url": "https://x.com/hallucinateddpt",
+          "thumb": "https://x2ww2cgnt2vbaqob.public.blob.vercel-storage.com/media/agents/ad-2026-11-07-old-west-wanted-poster-for-vibe-coding-i-9b26e-kXxp0W7eLZGEc8CISF4TNZPOmmxkTe.png",
+          "status": "live"
+        },
+        {
+          "at": "2026-11-08T00:20:00.000Z",
+          "kind": "post",
+          "title": "Tabloid ad: $700B wiped in 2.5 hours",
+          "url": "https://x.com/hallucinateddpt",
+          "thumb": "https://x2ww2cgnt2vbaqob.public.blob.vercel-storage.com/media/agents/ad-2026-11-07-tabloid-front-page-reacting-to-the-700b-637f2-uOXdHVQSZQaKnVMjFLIFr2cVi6jpBL.png",
+          "status": "live"
+        },
+        {
+          "at": "2026-11-07T22:50:00.000Z",
+          "kind": "post",
+          "title": "Developer stares into the SF fog",
+          "url": "https://x.com/hallucinateddpt",
+          "thumb": "https://x2ww2cgnt2vbaqob.public.blob.vercel-storage.com/media/agents/ad-2026-11-07-developer-stares-into-sf-fog-at-a-foggy-b8440-7CCjKMtpgGtgqFW2vJAjCVC6rMHVaA.png",
+          "status": "live"
+        },
+        {
+          "at": "2026-11-07T21:20:00.000Z",
+          "kind": "reply",
+          "title": "Answered a sizing question in the replies",
+          "url": "https://x.com/hallucinateddpt",
+          "thumb": null,
+          "status": "live"
+        }
+      ],
+      "runs": [
+        {
+          "id": "run_g9",
+          "started_at": "2026-11-08T02:54:00.000Z",
+          "ended_at": "2026-11-08T02:59:00.000Z",
+          "status": "ok",
+          "trigger": "schedule",
+          "spend_usd": 0.11,
+          "result": "Posted the npm install debt tee",
+          "steps": [
+            {
+              "at": "2026-11-08T02:54:00.000Z",
+              "tool": "store_catalog",
+              "label": "Catalog",
+              "icon": "catalog",
+              "ok": true,
+              "summary": "7 items live; newest: npm install debt"
+            },
+            {
+              "at": "2026-11-08T02:55:00.000Z",
+              "tool": "x_search",
+              "label": "Search X",
+              "icon": "search",
+              "ok": true,
+              "summary": "12 mentions since last run, 1 worth answering"
+            },
+            {
+              "at": "2026-11-08T02:56:00.000Z",
+              "tool": "x_reply",
+              "label": "Reply",
+              "icon": "reply",
+              "ok": true,
+              "summary": "Replied to a question about pre-orders",
+              "url": "https://x.com/hallucinateddpt"
+            },
+            {
+              "at": "2026-11-08T02:58:00.000Z",
+              "tool": "x_post",
+              "label": "Post",
+              "icon": "post",
+              "ok": true,
+              "summary": "npm install debt tee + store link",
+              "url": "https://x.com/hallucinateddpt",
+              "thumb": "https://x2ww2cgnt2vbaqob.public.blob.vercel-storage.com/media/agents/npm-install-debt-tee-launch-1-EB5YHfOcM6qNk0zduyYqRP4yqHEKw9.jpg"
+            }
+          ]
+        },
+        {
+          "id": "run_g8",
+          "started_at": "2026-11-08T01:24:00.000Z",
+          "ended_at": "2026-11-08T01:28:00.000Z",
+          "status": "ok",
+          "trigger": "schedule",
+          "spend_usd": 0.09,
+          "result": "Posted the wanted poster ad",
+          "steps": [
+            {
+              "at": "2026-11-08T01:24:00.000Z",
+              "tool": "ad_queue",
+              "label": "Ad queue",
+              "icon": "image",
+              "ok": true,
+              "summary": "2 approved ads waiting",
+              "thumb": "https://x2ww2cgnt2vbaqob.public.blob.vercel-storage.com/media/agents/ad-2026-11-07-old-west-wanted-poster-for-vibe-coding-i-9b26e-kXxp0W7eLZGEc8CISF4TNZPOmmxkTe.png"
+            },
+            {
+              "at": "2026-11-08T01:26:00.000Z",
+              "tool": "x_post",
+              "label": "Post",
+              "icon": "post",
+              "ok": true,
+              "summary": "Wanted poster ad",
+              "url": "https://x.com/hallucinateddpt",
+              "thumb": "https://x2ww2cgnt2vbaqob.public.blob.vercel-storage.com/media/agents/ad-2026-11-07-old-west-wanted-poster-for-vibe-coding-i-9b26e-kXxp0W7eLZGEc8CISF4TNZPOmmxkTe.png"
+            }
+          ]
+        },
+        {
+          "id": "run_g7",
+          "started_at": "2026-11-07T23:54:00.000Z",
+          "ended_at": "2026-11-08T00:00:00.000Z",
+          "status": "partial",
+          "trigger": "schedule",
+          "spend_usd": 0.1,
+          "result": "Browser reply skipped: X showed a challenge, paused for the day",
+          "steps": [
+            {
+              "at": "2026-11-07T23:54:00.000Z",
+              "tool": "x_search",
+              "label": "Search X",
+              "icon": "search",
+              "ok": true,
+              "summary": "3 fresh on-topic posts"
+            },
+            {
+              "at": "2026-11-07T23:57:00.000Z",
+              "tool": "x_browser_reply",
+              "label": "Browser reply",
+              "icon": "browser",
+              "ok": false,
+              "summary": "X asked for verification; stopped and flagged the founder"
+            },
+            {
+              "at": "2026-11-07T23:58:00.000Z",
+              "tool": "flag_founder",
+              "label": "Flag founder",
+              "icon": "flag",
+              "ok": true,
+              "summary": "Browser replies paused until tomorrow"
+            },
+            {
+              "at": "2026-11-07T23:59:00.000Z",
+              "tool": "x_post",
+              "label": "Post",
+              "icon": "post",
+              "ok": true,
+              "summary": "Tabloid ad",
+              "url": "https://x.com/hallucinateddpt",
+              "thumb": "https://x2ww2cgnt2vbaqob.public.blob.vercel-storage.com/media/agents/ad-2026-11-07-tabloid-front-page-reacting-to-the-700b-637f2-uOXdHVQSZQaKnVMjFLIFr2cVi6jpBL.png"
+            }
+          ]
+        }
+      ]
+    },
+    "creative": {
+      "key": "creative",
+      "name": "Creative",
+      "role": "ads of the clothes being worn",
+      "model": "glm-5.2",
+      "schedule": "11:30 · 15:30 · 19:30",
+      "next_run_at": "2026-11-08T03:41:00.000Z",
+      "tools": [
+        {
+          "name": "trends",
+          "label": "Trends",
+          "icon": "trends",
+          "permission": "allow"
+        },
+        {
+          "name": "generate_image",
+          "label": "Image",
+          "icon": "image",
+          "permission": "allow"
+        },
+        {
+          "name": "generate_video",
+          "label": "Video",
+          "icon": "video",
+          "permission": "allow"
+        },
+        {
+          "name": "submit_for_review",
+          "label": "Send to review",
+          "icon": "review",
+          "permission": "allow"
+        },
+        {
+          "name": "publish_campaign",
+          "label": "Publish ad",
+          "icon": "store",
+          "permission": "allow"
+        },
+        {
+          "name": "ads_activate",
+          "label": "Paid ads",
+          "icon": "money",
+          "permission": "ask"
+        }
+      ],
+      "shipped": [
+        {
+          "at": "2026-11-08T02:14:00.000Z",
+          "kind": "ad",
+          "title": "Tabloid front page: $700B wiped in 2.5 hours",
+          "url": null,
+          "thumb": "https://x2ww2cgnt2vbaqob.public.blob.vercel-storage.com/media/agents/ad-2026-11-07-tabloid-front-page-reacting-to-the-700b-637f2-uOXdHVQSZQaKnVMjFLIFr2cVi6jpBL.png",
+          "status": "approved"
+        },
+        {
+          "at": "2026-11-08T02:13:00.000Z",
+          "kind": "ad",
+          "title": "Wanted: vibe coding, 847 counts of technical debt",
+          "url": null,
+          "thumb": "https://x2ww2cgnt2vbaqob.public.blob.vercel-storage.com/media/agents/ad-2026-11-07-old-west-wanted-poster-for-vibe-coding-i-9b26e-kXxp0W7eLZGEc8CISF4TNZPOmmxkTe.png",
+          "status": "approved"
+        },
+        {
+          "at": "2026-11-08T02:12:00.000Z",
+          "kind": "ad",
+          "title": "Medieval manuscript catalog page",
+          "url": null,
+          "thumb": "https://x2ww2cgnt2vbaqob.public.blob.vercel-storage.com/media/agents/ad-2026-11-07-medieval-manuscript-catalog-page-selling-85156-Dh4GthUTlyxRdwKMioqzb0nyLxL8PK.png",
+          "status": "rejected"
+        },
+        {
+          "at": "2026-11-07T22:20:00.000Z",
+          "kind": "ad",
+          "title": "Y2K chrome job listing for a senior prompt engineer",
+          "url": null,
+          "thumb": "https://x2ww2cgnt2vbaqob.public.blob.vercel-storage.com/media/agents/ad-2026-11-07-fake-y2k-chrome-job-listing-for-a-senior-4c980-1mbElUBeaJ6Z9VpbCwiJ8iUliK0eNq.png",
+          "status": "approved"
+        },
+        {
+          "at": "2026-11-07T22:18:00.000Z",
+          "kind": "ad",
+          "title": "Daily standup in a glass meeting room (video)",
+          "url": null,
+          "thumb": "https://x2ww2cgnt2vbaqob.public.blob.vercel-storage.com/media/agents/ad-2026-11-07-a-daily-standup-in-a-glass-meeting-room-01e15--8dH7R8oDK3NLj9YSsg46vhaTWzMw9l.jpg",
+          "status": "approved"
+        },
+        {
+          "at": "2026-11-07T22:10:00.000Z",
+          "kind": "ad",
+          "title": "Tired engineer in a glass office tower",
+          "url": null,
+          "thumb": "https://x2ww2cgnt2vbaqob.public.blob.vercel-storage.com/media/agents/ad-2026-11-07-tired-engineer-in-a-glass-office-tower-e-55021-zrYZJUdLBxWf8z3Qcb29GYQPDywNp8.png",
+          "status": "approved"
+        }
+      ],
+      "runs": [
+        {
+          "id": "run_c3",
+          "started_at": "2026-11-08T02:08:00.000Z",
+          "ended_at": "2026-11-08T02:15:00.000Z",
+          "status": "partial",
+          "trigger": "schedule",
+          "spend_usd": 1.42,
+          "result": "3 ads made, 2 passed review",
+          "steps": [
+            {
+              "at": "2026-11-08T02:08:00.000Z",
+              "tool": "trends",
+              "label": "Trends",
+              "icon": "trends",
+              "ok": true,
+              "summary": "Top today: the $700B selloff, vibe-coding debt"
+            },
+            {
+              "at": "2026-11-08T02:10:00.000Z",
+              "tool": "generate_image",
+              "label": "Image",
+              "icon": "image",
+              "ok": true,
+              "summary": "Tabloid front page",
+              "thumb": "https://x2ww2cgnt2vbaqob.public.blob.vercel-storage.com/media/agents/ad-2026-11-07-tabloid-front-page-reacting-to-the-700b-637f2-uOXdHVQSZQaKnVMjFLIFr2cVi6jpBL.png"
+            },
+            {
+              "at": "2026-11-08T02:11:00.000Z",
+              "tool": "generate_image",
+              "label": "Image",
+              "icon": "image",
+              "ok": true,
+              "summary": "Old-west wanted poster",
+              "thumb": "https://x2ww2cgnt2vbaqob.public.blob.vercel-storage.com/media/agents/ad-2026-11-07-old-west-wanted-poster-for-vibe-coding-i-9b26e-kXxp0W7eLZGEc8CISF4TNZPOmmxkTe.png"
+            },
+            {
+              "at": "2026-11-08T02:12:00.000Z",
+              "tool": "generate_image",
+              "label": "Image",
+              "icon": "image",
+              "ok": true,
+              "summary": "Medieval manuscript catalog",
+              "thumb": "https://x2ww2cgnt2vbaqob.public.blob.vercel-storage.com/media/agents/ad-2026-11-07-medieval-manuscript-catalog-page-selling-85156-Dh4GthUTlyxRdwKMioqzb0nyLxL8PK.png"
+            },
+            {
+              "at": "2026-11-08T02:13:00.000Z",
+              "tool": "submit_for_review",
+              "label": "Send to review",
+              "icon": "review",
+              "ok": true,
+              "summary": "3 sent to the reviewer"
+            },
+            {
+              "at": "2026-11-08T02:14:00.000Z",
+              "tool": "submit_for_review",
+              "label": "Review result",
+              "icon": "check",
+              "ok": false,
+              "summary": "Manuscript ad rejected: shirt print garbled"
+            },
+            {
+              "at": "2026-11-08T02:15:00.000Z",
+              "tool": "publish_campaign",
+              "label": "Publish ad",
+              "icon": "store",
+              "ok": true,
+              "summary": "2 ads queued for Growth"
+            }
+          ]
+        },
+        {
+          "id": "run_c2",
+          "started_at": "2026-11-07T22:08:00.000Z",
+          "ended_at": "2026-11-07T22:17:00.000Z",
+          "status": "ok",
+          "trigger": "schedule",
+          "spend_usd": 2.1,
+          "result": "3 ads made (1 video), all passed",
+          "steps": [
+            {
+              "at": "2026-11-07T22:08:00.000Z",
+              "tool": "trends",
+              "label": "Trends",
+              "icon": "trends",
+              "ok": true,
+              "summary": "Return-to-office memes, prompt-engineer job posts"
+            },
+            {
+              "at": "2026-11-07T22:10:00.000Z",
+              "tool": "generate_image",
+              "label": "Image",
+              "icon": "image",
+              "ok": true,
+              "summary": "Tired engineer",
+              "thumb": "https://x2ww2cgnt2vbaqob.public.blob.vercel-storage.com/media/agents/ad-2026-11-07-tired-engineer-in-a-glass-office-tower-e-55021-zrYZJUdLBxWf8z3Qcb29GYQPDywNp8.png"
+            },
+            {
+              "at": "2026-11-07T22:13:00.000Z",
+              "tool": "generate_video",
+              "label": "Video",
+              "icon": "video",
+              "ok": true,
+              "summary": "Daily standup, 8 s",
+              "thumb": "https://x2ww2cgnt2vbaqob.public.blob.vercel-storage.com/media/agents/ad-2026-11-07-a-daily-standup-in-a-glass-meeting-room-01e15--8dH7R8oDK3NLj9YSsg46vhaTWzMw9l.jpg"
+            },
+            {
+              "at": "2026-11-07T22:16:00.000Z",
+              "tool": "generate_image",
+              "label": "Image",
+              "icon": "image",
+              "ok": true,
+              "summary": "Y2K job listing",
+              "thumb": "https://x2ww2cgnt2vbaqob.public.blob.vercel-storage.com/media/agents/ad-2026-11-07-fake-y2k-chrome-job-listing-for-a-senior-4c980-1mbElUBeaJ6Z9VpbCwiJ8iUliK0eNq.png"
+            },
+            {
+              "at": "2026-11-07T22:17:00.000Z",
+              "tool": "submit_for_review",
+              "label": "Send to review",
+              "icon": "review",
+              "ok": true,
+              "summary": "3 passed"
+            }
+          ]
+        }
+      ]
+    },
+    "ceo": {
+      "key": "ceo",
+      "name": "CEO",
+      "role": "approves or kills designs, sets the day's plan",
+      "model": "glm-5.2",
+      "schedule": "on each proposal · daily plan 09:00",
+      "next_run_at": "2026-11-08T16:18:00.000Z",
+      "tools": [
+        {
+          "name": "review_proposals",
+          "label": "Proposals",
+          "icon": "review",
+          "permission": "allow"
+        },
+        {
+          "name": "ceo_decide",
+          "label": "Decide",
+          "icon": "check",
+          "permission": "allow"
+        },
+        {
+          "name": "store_catalog",
+          "label": "Catalog",
+          "icon": "catalog",
+          "permission": "allow"
+        },
+        {
+          "name": "daily_plan",
+          "label": "Plan",
+          "icon": "plan",
+          "permission": "allow"
+        },
+        {
+          "name": "charge_preorders",
+          "label": "Charge pre-orders",
+          "icon": "money",
+          "permission": "ask"
+        },
+        {
+          "name": "flag_founder",
+          "label": "Flag founder",
+          "icon": "flag",
+          "permission": "allow"
+        }
+      ],
+      "shipped": [
+        {
+          "at": "2026-11-08T02:46:00.000Z",
+          "kind": "verdict",
+          "title": "Approved npm install debt: a clean one-liner for the vibe-coding debt discourse",
+          "url": "https://hallucinated-store.vercel.app/p/npm-install-debt-tee",
+          "thumb": "https://x2ww2cgnt2vbaqob.public.blob.vercel-storage.com/media/agents/npm-install-debt-tee-launch-1-EB5YHfOcM6qNk0zduyYqRP4yqHEKw9.jpg",
+          "status": "approved"
+        },
+        {
+          "at": "2026-11-08T02:45:00.000Z",
+          "kind": "verdict",
+          "title": "Approved git blame --ai",
+          "url": "https://hallucinated-store.vercel.app/p/git-blame-ai-tee",
+          "thumb": "https://x2ww2cgnt2vbaqob.public.blob.vercel-storage.com/media/agents/git-blame-ai-tee-launch-1-Yi0Q6AHgQp4PwpwgAeqA8pOSHXULa4.jpg",
+          "status": "approved"
+        },
+        {
+          "at": "2026-11-08T00:50:00.000Z",
+          "kind": "verdict",
+          "title": "Killed 'Hustle culture robot': six fingers, no joke",
+          "url": null,
+          "thumb": null,
+          "status": "rejected"
+        },
+        {
+          "at": "2026-11-07T18:00:00.000Z",
+          "kind": "plan",
+          "title": "Today: two designs on vibe-coding debt, ads on the selloff, no hoodie restock",
+          "url": null,
+          "thumb": null,
+          "status": "done"
+        }
+      ],
+      "runs": [
+        {
+          "id": "run_ceo4",
+          "started_at": "2026-11-08T02:44:00.000Z",
+          "ended_at": "2026-11-08T02:47:00.000Z",
+          "status": "ok",
+          "trigger": "handoff",
+          "spend_usd": 0.06,
+          "result": "Approved 2 of 2 proposals",
+          "steps": [
+            {
+              "at": "2026-11-08T02:44:00.000Z",
+              "tool": "review_proposals",
+              "label": "Proposals",
+              "icon": "review",
+              "ok": true,
+              "summary": "2 from Product: git blame --ai, npm install debt"
+            },
+            {
+              "at": "2026-11-08T02:45:00.000Z",
+              "tool": "ceo_decide",
+              "label": "Decide",
+              "icon": "check",
+              "ok": true,
+              "summary": "Approved git blame --ai",
+              "url": "https://hallucinated-store.vercel.app/p/git-blame-ai-tee",
+              "thumb": "https://x2ww2cgnt2vbaqob.public.blob.vercel-storage.com/media/agents/git-blame-ai-tee-launch-1-Yi0Q6AHgQp4PwpwgAeqA8pOSHXULa4.jpg"
+            },
+            {
+              "at": "2026-11-08T02:46:00.000Z",
+              "tool": "ceo_decide",
+              "label": "Decide",
+              "icon": "check",
+              "ok": true,
+              "summary": "Approved npm install debt",
+              "url": "https://hallucinated-store.vercel.app/p/npm-install-debt-tee",
+              "thumb": "https://x2ww2cgnt2vbaqob.public.blob.vercel-storage.com/media/agents/npm-install-debt-tee-launch-1-EB5YHfOcM6qNk0zduyYqRP4yqHEKw9.jpg"
+            }
+          ]
+        },
+        {
+          "id": "run_ceo3",
+          "started_at": "2026-11-08T00:48:00.000Z",
+          "ended_at": "2026-11-08T00:50:00.000Z",
+          "status": "ok",
+          "trigger": "handoff",
+          "spend_usd": 0.04,
+          "result": "Rejected 1 proposal",
+          "steps": [
+            {
+              "at": "2026-11-08T00:48:00.000Z",
+              "tool": "review_proposals",
+              "label": "Proposals",
+              "icon": "review",
+              "ok": true,
+              "summary": "1 from Product: Hustle culture robot"
+            },
+            {
+              "at": "2026-11-08T00:50:00.000Z",
+              "tool": "ceo_decide",
+              "label": "Decide",
+              "icon": "check",
+              "ok": true,
+              "summary": "Rejected: six fingers on one hand, joke needs a thread"
+            }
+          ]
+        },
+        {
+          "id": "run_ceo1",
+          "started_at": "2026-11-07T18:00:00.000Z",
+          "ended_at": "2026-11-07T18:04:00.000Z",
+          "status": "ok",
+          "trigger": "schedule",
+          "spend_usd": 0.08,
+          "result": "Wrote today's plan",
+          "steps": [
+            {
+              "at": "2026-11-07T18:00:00.000Z",
+              "tool": "store_catalog",
+              "label": "Catalog",
+              "icon": "catalog",
+              "ok": true,
+              "summary": "7 items, 4 pre-orders"
+            },
+            {
+              "at": "2026-11-07T18:02:00.000Z",
+              "tool": "daily_plan",
+              "label": "Plan",
+              "icon": "plan",
+              "ok": true,
+              "summary": "Two designs, ads on the selloff, hold the hoodie"
+            }
+          ]
+        }
+      ]
+    },
+    "product": {
+      "key": "product",
+      "name": "Product",
+      "role": "trends → designs",
+      "model": "glm-5.2",
+      "schedule": "10:00 · 16:00",
+      "next_run_at": "2026-11-08T08:58:00.000Z",
+      "tools": [
+        {
+          "name": "trends",
+          "label": "Trends",
+          "icon": "trends",
+          "permission": "allow"
+        },
+        {
+          "name": "x_search",
+          "label": "Search X",
+          "icon": "search",
+          "permission": "allow"
+        },
+        {
+          "name": "generate_design",
+          "label": "Design",
+          "icon": "design",
+          "permission": "allow"
+        },
+        {
+          "name": "propose_design",
+          "label": "Propose",
+          "icon": "review",
+          "permission": "allow"
+        }
+      ],
+      "shipped": [
+        {
+          "at": "2026-11-08T02:44:00.000Z",
+          "kind": "design",
+          "title": "git blame --ai",
+          "url": "https://hallucinated-store.vercel.app/p/git-blame-ai-tee",
+          "thumb": "https://x2ww2cgnt2vbaqob.public.blob.vercel-storage.com/media/agents/git-blame-ai-tee-launch-1-Yi0Q6AHgQp4PwpwgAeqA8pOSHXULa4.jpg",
+          "status": "live"
+        },
+        {
+          "at": "2026-11-08T02:43:00.000Z",
+          "kind": "design",
+          "title": "npm install debt",
+          "url": "https://hallucinated-store.vercel.app/p/npm-install-debt-tee",
+          "thumb": "https://x2ww2cgnt2vbaqob.public.blob.vercel-storage.com/media/agents/npm-install-debt-tee-launch-1-EB5YHfOcM6qNk0zduyYqRP4yqHEKw9.jpg",
+          "status": "live"
+        },
+        {
+          "at": "2026-11-07T22:00:00.000Z",
+          "kind": "design",
+          "title": "vibe coded",
+          "url": "https://hallucinated-store.vercel.app/p/vibe-coded-tee",
+          "thumb": "https://x2ww2cgnt2vbaqob.public.blob.vercel-storage.com/media/agents/vibe-coded-tee-launch-1-ydIrNNWkHK2GMgJrWyV43NULQEbsjS.jpg",
+          "status": "live"
+        }
+      ],
+      "runs": [
+        {
+          "id": "run_p2",
+          "started_at": "2026-11-08T02:30:00.000Z",
+          "ended_at": "2026-11-08T02:44:00.000Z",
+          "status": "ok",
+          "trigger": "schedule",
+          "spend_usd": 0.48,
+          "result": "2 designs proposed, both approved",
+          "steps": [
+            {
+              "at": "2026-11-08T02:30:00.000Z",
+              "tool": "trends",
+              "label": "Trends",
+              "icon": "trends",
+              "ok": true,
+              "summary": "r/sanfrancisco, HN, Threads: vibe-coding debt"
+            },
+            {
+              "at": "2026-11-08T02:33:00.000Z",
+              "tool": "x_search",
+              "label": "Search X",
+              "icon": "search",
+              "ok": true,
+              "summary": "40 posts on 'vibe coding'"
+            },
+            {
+              "at": "2026-11-08T02:36:00.000Z",
+              "tool": "generate_design",
+              "label": "Design",
+              "icon": "design",
+              "ok": true,
+              "summary": "git blame --ai",
+              "thumb": "https://hallucinated-store.vercel.app/api/mockup?side=flat&print=https%3A%2F%2Fx2ww2cgnt2vbaqob.public.blob.vercel-storage.com%2Fmedia%2Fagents%2Fgit-blame-ai-tee-print-iN5JFvHyP28azNkUQWuS7npTqpo9pj.png"
+            },
+            {
+              "at": "2026-11-08T02:40:00.000Z",
+              "tool": "generate_design",
+              "label": "Design",
+              "icon": "design",
+              "ok": true,
+              "summary": "npm install debt",
+              "thumb": "https://hallucinated-store.vercel.app/api/mockup?side=flat&print=https%3A%2F%2Fx2ww2cgnt2vbaqob.public.blob.vercel-storage.com%2Fmedia%2Fagents%2Fnpm-install-debt-tee-print-YRGHSC5XYfe6WD9MJi1TneNlzqi8ck.png"
+            },
+            {
+              "at": "2026-11-08T02:43:00.000Z",
+              "tool": "propose_design",
+              "label": "Propose",
+              "icon": "review",
+              "ok": true,
+              "summary": "Sent 2 to the CEO"
+            }
+          ]
+        }
+      ]
+    },
+    "reviewer": {
+      "key": "reviewer",
+      "name": "Reviewer",
+      "role": "checks every ad before it ships",
+      "model": "gemini-3-flash-preview",
+      "schedule": "on each ad",
+      "next_run_at": null,
+      "tools": [
+        {
+          "name": "view_image",
+          "label": "Look at image",
+          "icon": "image",
+          "permission": "allow"
+        },
+        {
+          "name": "review_verdict",
+          "label": "Verdict",
+          "icon": "check",
+          "permission": "allow"
+        }
+      ],
+      "shipped": [],
+      "runs": []
+    },
+    "ops": {
+      "key": "ops",
+      "name": "Ops",
+      "role": "print orders, courier",
+      "model": "glm-5.2",
+      "schedule": "hourly :40",
+      "next_run_at": "2026-11-08T03:34:00.000Z",
+      "tools": [
+        {
+          "name": "stripe_orders",
+          "label": "Orders",
+          "icon": "money",
+          "permission": "allow"
+        },
+        {
+          "name": "customania_order",
+          "label": "Print order",
+          "icon": "store",
+          "permission": "allow"
+        },
+        {
+          "name": "customania_handoff_payment",
+          "label": "Hand off payment",
+          "icon": "money",
+          "permission": "ask"
+        },
+        {
+          "name": "courier_quote",
+          "label": "Courier quote",
+          "icon": "courier",
+          "permission": "allow"
+        },
+        {
+          "name": "courier_book",
+          "label": "Book courier",
+          "icon": "courier",
+          "permission": "ask"
+        }
+      ],
+      "shipped": [
+        {
+          "at": "2026-11-07T20:10:00.000Z",
+          "kind": "order",
+          "title": "Customania order CF5A93CRK: 4 black tees, front + back",
+          "url": null,
+          "thumb": "https://x2ww2cgnt2vbaqob.public.blob.vercel-storage.com/media/v2/tee-back.jpg",
+          "status": "paid"
+        }
+      ],
+      "runs": [
+        {
+          "id": "run_o6",
+          "started_at": "2026-11-08T02:52:00.000Z",
+          "ended_at": "2026-11-08T02:55:00.000Z",
+          "status": "waiting",
+          "trigger": "schedule",
+          "spend_usd": 0.05,
+          "result": "Courier quote $17.67; waiting on the founder",
+          "steps": [
+            {
+              "at": "2026-11-08T02:52:00.000Z",
+              "tool": "stripe_orders",
+              "label": "Orders",
+              "icon": "money",
+              "ok": true,
+              "summary": "2 new paid orders"
+            },
+            {
+              "at": "2026-11-08T02:53:00.000Z",
+              "tool": "courier_quote",
+              "label": "Courier quote",
+              "icon": "courier",
+              "ok": true,
+              "summary": "Uber Courier $17.67, 7:30–8:00 pm"
+            },
+            {
+              "at": "2026-11-08T02:54:00.000Z",
+              "tool": "courier_book",
+              "label": "Book courier",
+              "icon": "courier",
+              "ok": true,
+              "summary": "Waiting on the founder's approval"
+            }
+          ]
+        }
+      ]
+    },
+    "support": {
+      "key": "support",
+      "name": "Support",
+      "role": "inbox, pickups",
+      "model": "glm-5.2",
+      "schedule": "every 15 min (paused)",
+      "next_run_at": null,
+      "tools": [
+        {
+          "name": "inbox_list",
+          "label": "Inbox",
+          "icon": "inbox",
+          "permission": "allow"
+        },
+        {
+          "name": "inbox_reply",
+          "label": "Reply",
+          "icon": "mail",
+          "permission": "allow"
+        },
+        {
+          "name": "flag_founder",
+          "label": "Flag founder",
+          "icon": "flag",
+          "permission": "allow"
+        }
+      ],
+      "shipped": [
+        {
+          "at": "2026-11-08T01:25:00.000Z",
+          "kind": "reply",
+          "title": "Answered a sizing question (L vs XL)",
+          "url": null,
+          "thumb": null,
+          "status": "sent"
+        }
+      ],
+      "runs": []
+    }
+  }
+}

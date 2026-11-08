@@ -60,3 +60,17 @@ export type Hq = {
   timeline?: HqEvent[];
   human?: HqHuman[];
 };
+
+// hq-agents.json v1: per-agent drill-down (/hq/agent/[key]).
+export type HqToolIcon =
+  | "search" | "trends" | "design" | "image" | "video" | "review" | "check" | "post" | "reply" | "browser"
+  | "store" | "money" | "courier" | "inbox" | "plan" | "flag" | "catalog" | "mail" | "other";
+export type HqTool = { name: string; label?: string; icon?: HqToolIcon | string; permission?: "allow" | "ask" | string };
+export type HqShipped = { at?: string; kind?: "design" | "ad" | "post" | "reply" | "verdict" | "plan" | string; title?: string; url?: string | null; thumb?: string | null; status?: string };
+export type HqStep = { at?: string; tool?: string; label?: string; icon?: HqToolIcon | string; ok?: boolean; summary?: string; url?: string | null; thumb?: string | null };
+export type HqRun = { id: string; started_at?: string; ended_at?: string | null; status?: string; trigger?: "schedule" | "manual" | "handoff" | string; spend_usd?: number; result?: string; steps?: HqStep[] };
+export type HqAgentDetail = {
+  key: string; name?: string; role?: string; model?: string; schedule?: string; next_run_at?: string | null;
+  tools?: HqTool[]; shipped?: HqShipped[]; runs?: HqRun[];
+};
+export type HqAgentsDoc = { version: 1; generated_at?: string; agents: Record<string, HqAgentDetail> };
