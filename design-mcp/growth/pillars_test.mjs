@@ -3,20 +3,17 @@
 import assert from "node:assert/strict";
 import { nextPillar, linkAllowed, hasStoreLink, agentsLogEvents, pickSpotlight, ROTATION } from "./pillars.mjs";
 
-// rotation: new_design first, else agents_log -> spotlight -> reply_bait -> joke, skipping empty pillars
-const all = { agentsLogNew: true, spotlightAvailable: true };
-assert.equal(nextPillar({ ...all, hasNewDesign: true, lastRotation: "spotlight" }), "new_design");
-assert.equal(nextPillar({ ...all, lastRotation: undefined }), "agents_log");
-assert.equal(nextPillar({ ...all, lastRotation: "agents_log" }), "spotlight");
-assert.equal(nextPillar({ ...all, lastRotation: "spotlight" }), "reply_bait");
-assert.equal(nextPillar({ ...all, lastRotation: "reply_bait" }), "joke");
-assert.equal(nextPillar({ ...all, lastRotation: "joke" }), "agents_log");
-assert.equal(nextPillar({ agentsLogNew: false, spotlightAvailable: true, lastRotation: "joke" }), "spotlight");    // nothing new in the loop: skip
-assert.equal(nextPillar({ agentsLogNew: false, spotlightAvailable: false, lastRotation: "joke" }), "reply_bait");
-// a full cycle with everything available visits each pillar once
-let last, seen = [];
-for (let i = 0; i < 4; i++) { const p = nextPillar({ ...all, lastRotation: last }); seen.push(p); last = p; }
-assert.deepEqual(seen, ROTATION);
+// rotation (phase 8): ad first; else agents_log at most once a day when something new happened; else reply_bait <-> joke
+assert.equal(nextPillar({ hasAd: true, agentsLogNew: true, lastRotation: "joke" }), "ad");
+assert.equal(nextPillar({ hasAd: false, agentsLogNew: true, agentsLogToday: false, lastRotation: "joke" }), "agents_log");
+assert.equal(nextPillar({ hasAd: false, agentsLogNew: true, agentsLogToday: true, lastRotation: "joke" }), "reply_bait");   // 1/day
+assert.equal(nextPillar({ hasAd: false, agentsLogNew: false, lastRotation: "reply_bait" }), "joke");
+assert.equal(nextPillar({ hasAd: false, agentsLogNew: false, lastRotation: "agents_log" }), "reply_bait");
+assert.equal(nextPillar({ hasAd: false, agentsLogNew: false, lastRotation: undefined }), "reply_bait");
+assert.deepEqual(ROTATION, ["reply_bait", "joke"]);
+// spotlight and plain new_design are never picked any more
+for (const lastRotation of [undefined, "agents_log", "spotlight", "reply_bait", "joke"]) for (const hasAd of [true, false]) for (const agentsLogNew of [true, false])
+  assert.ok(!["spotlight", "new_design"].includes(nextPillar({ lastRotation, hasAd, agentsLogNew, hasNewDesign: true, spotlightAvailable: true })));
 
 // link rule: at most 1 in 3 originals; announcements exempt and not counted; replies/threads don't count
 const L = (...posts) => ({ posts: posts.map(([pillar, has_link, extra = {}]) => ({ kind: "post", thread: false, pillar, has_link, ...extra })) });

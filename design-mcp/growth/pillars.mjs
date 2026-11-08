@@ -1,21 +1,17 @@
 // Growth's content rotation, decided in code (state lives in the X ledger, not the LLM's memory).
-// One original post per run (ad = a reviewed ad from the Creative agent, right after new_design):
-//   new_design  whenever an agent design is published and not yet announced (always first)
-//   else rotate agents_log -> spotlight -> reply_bait -> joke, skipping a pillar with nothing to say
-//   (agents_log: nothing new in the design ledger since the last agents_log post; spotlight: no product to show).
-// Link rule: at most 1 in 3 original posts carries the store link. new_design announcements are exempt (they always link)
-// and don't count toward the window.
-export const ROTATION = ["agents_log", "spotlight", "reply_bait", "joke"];
-export const PILLARS = ["new_design", "ad", ...ROTATION];
+// Phase 8 (John, Sat): Growth posts hard-hitting ADS, not plain tees. One original post per run:
+//   ad          a reviewed ad from the Creative agent (new agent designs are announced THROUGH an ad that features them)
+//   agents_log  rare fallback: something new happened in the loop AND no agents_log post yet today (Pacific)
+//   else alternate reply_bait <-> joke
+// spotlight and plain new_design posts are out of the rotation (the names stay valid for old ledger entries).
+// Link rule: at most 1 in 3 original posts carries the store link (new_design announcements, now unused, stay exempt).
+export const ROTATION = ["reply_bait", "joke"];
+export const PILLARS = ["ad", "agents_log", ...ROTATION, "new_design", "spotlight"];
 
-// ads first (John, Sat 17:40: "focus everything on growth ads"), then new_design, then the rotation
-export function nextPillar({ lastRotation, hasNewDesign, hasAd, agentsLogNew, spotlightAvailable }) {
+export function nextPillar({ lastRotation, hasAd, agentsLogNew, agentsLogToday }) {
   if (hasAd) return "ad";
-  if (hasNewDesign) return "new_design";
-  const can = { agents_log: !!agentsLogNew, spotlight: !!spotlightAvailable, reply_bait: true, joke: true };
-  const start = ROTATION.indexOf(lastRotation) + 1;   // -1 + 1 = 0 when nothing has run yet
-  for (let i = 0; i < ROTATION.length; i++) { const p = ROTATION[(start + i) % ROTATION.length]; if (can[p]) return p; }
-  return "joke";
+  if (agentsLogNew && !agentsLogToday) return "agents_log";
+  return lastRotation === "reply_bait" ? "joke" : "reply_bait";
 }
 
 const originals = (ledger) => (ledger.posts || []).filter((p) => p.kind === "post" && !p.thread);

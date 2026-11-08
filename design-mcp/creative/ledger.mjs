@@ -50,3 +50,29 @@ export function creativeEvents(rootDir, since) {
     ev.push({ at: a.created_at, type: "ad_made", by: "Creative agent", kind: a.kind, concept: a.concept, caption: a.caption, event: a.event });
   return ev.sort((a, b) => a.at.localeCompare(b.at));
 }
+
+// ---- phase 8: code picks each ad's kind (video <-> image, within the caps) and features new designs first ----
+const modeKey = () => (testMode() ? "test" : "live");
+export const lastKind = (l) => (l.last_kind || {})[modeKey()] || null;
+export const setLastKind = (l, kind) => { (l.last_kind ||= {})[modeKey()] = kind; };
+// Pure: the other kind than last time, if it still has room today; else the one that does; null = both caps are full
+export function pickKind({ last, imageLeft, videoLeft }) {
+  const order = last === "video" ? ["image", "video"] : ["video", "image"];
+  return order.find((k) => (k === "video" ? videoLeft : imageLeft) > 0) || null;
+}
+// Pure: live agent designs (catalog entries with by_agents) that no ad of this mode has featured yet, oldest catalog order
+export function unadvertised(catalog, l) {
+  const featured = new Set(Object.values(l.ads || {}).filter((a) => !!a.test === testMode() && a.state !== "withdrawn").flatMap((a) => a.featured_products || []));
+  return (catalog || []).filter((p) => p.by_agents && !featured.has(p.slug));
+}
+
+// Pure: the product this ad features. Every ad features one (John: our clothes, worn): a new agent design without an ad
+// first; else the live catalog in rotation (least recently featured first).
+export function pickFeature(catalog, l) {
+  const fresh = unadvertised(catalog, l);
+  if (fresh.length) return { product: fresh[0], why: "new agent design without an ad yet" };
+  const last = {};
+  for (const a of Object.values(l.ads || {})) if (!!a.test === testMode() && a.state !== "withdrawn") for (const s of a.featured_products || []) if (!last[s] || a.created_at > last[s]) last[s] = a.created_at;
+  const pool = [...(catalog || [])].sort((a, b) => String(last[a.slug] || "").localeCompare(String(last[b.slug] || "")) || String(a.slug).localeCompare(b.slug));
+  return pool.length ? { product: pool[0], why: "catalog rotation (least recently featured)" } : null;
+}

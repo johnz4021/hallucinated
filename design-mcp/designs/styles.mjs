@@ -54,21 +54,32 @@ export function recordStyle(rootDir, style, design_id, override_reason) {
   writeJson(file(rootDir), l);
 }
 
-// Ad formats for Creative, rotated the same way (in ads.json), each paired with a fitting visual style.
+// Ad scenarios for Creative (John, Sat 18:00: "based on real-life wear, not those animated posters"): every ad is a
+// PHOTOREALISTIC photo of a (fictional) person WEARING our clothes, the garment the clear centre of the frame. The joke is
+// the situation + the X caption. Rotated like the design styles (in ads.json), each paired with a photo style.
 export const AD_FORMATS = {
-  fake_billboard: "a fake billboard on the 101, photographed from the freeway at golden hour",
-  tabloid_cover: "a supermarket tabloid cover about the agents or the SF tech scene",
-  museum_placard: "a museum placard next to a mundane tech artifact, in a hushed gallery",
-  infomercial_still: "a late-night infomercial still: overacting hands, 'BUT WAIT' energy, a fake phone number",
-  nature_doc_still: "a nature-documentary still with a deadpan subtitle observing a tech creature in its habitat",
-  catalog_page: "a vintage mail-order catalog page with product numbers and absurd copy",
-  wanted_poster: "an Old-West wanted poster for a startup sin",
-  pitch_deck_slide: "a single fake pitch-deck slide",
-  job_listing: "a fake job listing screenshot",
-  terminal_screenshot: "a terminal or error-message screenshot",
-  incident_report: "a mock incident report / postmortem page",
-  editorial_photo: "a deadpan editorial photo with one line of copy",
-  airline_safety_card: "an airline safety card illustrating a startup emergency",
-  trading_card: "a collectible trading card of an SF tech archetype (fictional)",
+  beanbag_3am: "a founder asleep on an office beanbag at 3am, laptop still open, cold pizza, monitor glow",
+  whiteboard_boxes: "two engineers at a whiteboard covered in boxes and arrows, one pointing with total confidence",
+  caltrain_fog: "someone waiting on a foggy Caltrain platform at dawn, hands in pockets, train lights in the mist",
+  demo_day_stage: "a demo-day stage photo: a nervous founder mid-pitch under hard stage lights, audience silhouettes",
+  waymo_selfie: "a back-seat selfie in a driverless robotaxi (unbranded), empty driver's seat in frame",
+  coffee_shop_laptop: "a coffee-shop laptop shot: a founder hunched over a laptop, oat-milk latte, three chargers",
+  rto_badge_line: "an office return-to-office badge line, a queue of tired engineers at the turnstiles at 9am",
+  dolores_park: "Dolores Park on a sunny afternoon, someone 'working' on a laptop on the grass, city skyline behind",
+  server_room: "a server room: someone in the aisle between blinking racks, holding a single sad cable",
+  standup_meeting: "a daily standup in a glass meeting room, everyone standing, one person very much not listening",
+  rooftop_party: "a startup rooftop party at golden hour, someone explaining their pivot to a polite stranger",
+  scooter_commute: "someone on an electric scooter in the Mission at rush hour, laptop bag, determined face",
+  vc_coffee: "a pitch over coffee at a Sand Hill Road cafe, the founder leaning in, the investor checking their phone",
+  hackathon_floor: "a hackathon floor at 4am: energy drinks, sleeping bags, one person still coding",
 };
+// Photo styles for the scenarios (photorealistic only)
+export const AD_PHOTO_STYLES = {
+  editorial: "editorial fashion photography: natural light, shallow depth of field, real skin texture, magazine quality",
+  street: "street photography: candid, 35mm, available light, slight motion, real city grit",
+  flash: "direct-flash party/night photography: hard flash, deep shadows, candid, a little chaotic",
+  phone_candid: "an iPhone candid: slightly imperfect framing, natural colours, as if a friend took it",
+  film_35mm: "35mm film photo: Portra colours, grain, soft highlights",
+};
+export const AD_PHOTO_STYLE_IDS = Object.keys(AD_PHOTO_STYLES);
 export const AD_FORMAT_IDS = Object.keys(AD_FORMATS);

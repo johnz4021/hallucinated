@@ -15,7 +15,7 @@ import { creativeEvents, loadAds, mutateAds, queuedAds, testMode as adsTestMode,
 import { badHashtags } from "../creative/tools.mjs";
 import { attachXUrl, backfillXUrls } from "../creative/x_urls.mjs";
 import { PILLARS, LINK_WINDOW, nextPillar, linkAllowed, hasStoreLink, agentsLogEvents, pickSpotlight } from "../growth/pillars.mjs";
-import { loadProposals } from "../designs/ledger.mjs";
+import { loadProposals, ptDay } from "../designs/ledger.mjs";
 import { flagJohn } from "../agentmail/tools.mjs";
 import { loadBrowserState, saveBrowserState, scheduleCheck, targetCheck, textCheck, endOfPtDay, withBrowserLock, browserReply } from "./browser.mjs";
 import { naiveReply } from "./naive_browser.mjs";
@@ -209,6 +209,11 @@ export function registerXTools(server, ctx) {
         ...(event ? { event: true } : {}), ...(ad ? { ad_id: ad.id } : {}) });
       if (ad) mutateAds(ctx.rootDir, (x) => { Object.assign(x.ads[ad.id], DRY() ? { posted_dry: { post_id: r.id, at, text } } : { state: "posted", posted: { post_id: r.id, at, url: r.url, text } }); });
       // link the store campaign to this post (CONTENT.md §5 x_url): in the background, never fails the post; retried each Growth run
+      if (ad) {   // phase 8: new designs are announced through the ad that features them
+        const sc0 = stripeClient(ctx.rootDir);
+        for (const p of Object.values(loadProposals(ctx.rootDir).proposals)) if (p.state === "published" && p.mode === sc0.mode && (ad.featured_products || []).includes(p.slug) && !(DRY() ? p.announced_dry : p.announced))
+          markAnnounced(ctx.rootDir, p.proposal_id, r.id);
+      }
       if (ad && !DRY()) me().then((m) => attachXUrl({ rootDir: ctx.rootDir, adId: ad.id, username: m.username, postId: r.id, log: ctx.log })).catch((e) => ctx.log?.(`[x_url] ${ad.id}: ${e.message}`));
       if (!reply_to && pillar) {
         l.growth = { ...g, pending: null, last_pillar: pillar, ...(!["new_design", "ad"].includes(pillar) ? { last_rotation: pillar } : {}),
@@ -230,7 +235,7 @@ export function registerXTools(server, ctx) {
 
   server.registerTool("growth_next_pillar", {
     title: "This run's content pillar (call before the original post)",
-    description: "Decides, in code, what this run's ONE original post is about: new_design (an unannounced agent design: always first), then ad (a reviewed ad from the Creative agent), else the rotation agents_log -> spotlight -> reply_bait -> joke, skipping pillars with nothing to say. Returns the pillar, the material to use (design, ad, the agents' log, or a product with its image), whether this post may carry the store link (at most 1 in 3; announcements exempt), and recent post texts so you don't repeat yourself. Pass the pillar to x_post.",
+    description: "Decides, in code, what this run's ONE original post is about: ad (a reviewed ad from the Creative agent; new designs are announced through ads), else agents_log (at most once a day, when something new happened), else reply_bait / joke alternating. Returns the pillar, the material (the ad with its featured products, or the agents' log), whether this post may carry the store link (at most 1 in 3), and recent post texts so you don't repeat yourself. Pass the pillar to x_post.",
     inputSchema: {},
   }, async () => {
     try {
@@ -243,12 +248,16 @@ export function registerXTools(server, ctx) {
       const catalog = await spotlightCatalog();
       const ads = pendingAds();
       const eventsLeft = MAX_EVENT_POSTS_PER_DAY() - eventPostsToday(l);
-      const pillar = nextPillar({ lastRotation: g.last_rotation, hasNewDesign: fresh.length > 0, hasAd: ads.some((a) => !a.event || eventsLeft > 0), agentsLogNew: events.length > 0, spotlightAvailable: catalog.length > 0 });
-      const spot = pillar === "spotlight" ? pickSpotlight(catalog, g.spotlight_history, (l.posts || []).filter((p) => p.kind === "post" && !p.thread).slice(-6)) : null;
+      const agentsLogToday = (l.posts || []).some((p) => p.kind === "post" && p.pillar === "agents_log" && ptDay(p.at) === ptDay(new Date()));
+      const pillar = nextPillar({ lastRotation: g.last_rotation, hasAd: ads.some((a) => !a.event || eventsLeft > 0), agentsLogNew: events.length > 0, agentsLogToday });
+      const spot = null;   // spotlight is out of the rotation (phase 8)
       const ad = pillar === "ad" ? ads.find((a) => !a.event || eventsLeft > 0) : null;
+      // a featured product that is a new agent design: the ad is its announcement (product URL + price for the caption)
+      const featured = ad ? (ad.featured_products || []).map((s) => catalog.find((c) => c.slug === s)).filter(Boolean).map((c) => ({ slug: c.slug, name: c.name, url: c.url, price: c.price || null, new_design: fresh.some((f) => f.slug === c.slug) })) : [];
       const material = pillar === "new_design" ? { design: fresh[0], media: fresh[0].image, announce_slug: fresh[0].slug }
-        : pillar === "ad" ? { ad: { ad_id: ad.id, kind: ad.kind, concept: ad.concept, caption: ad.caption, event: ad.event, sources: ad.sources, featured_products: ad.featured_products },
-            media: ad.naive_file_id, note: "Post the ad with media = material.media and ad_id; use its caption or sharpen it in the same spirit. No hashtags except #hallucinated." }
+        : pillar === "ad" ? { ad: { ad_id: ad.id, kind: ad.kind, concept: ad.concept, caption: ad.caption, headline: ad.headline || null, event: ad.event, sources: ad.sources, featured_products: ad.featured_products },
+            featured, media: ad.naive_file_id,
+            note: "Post the ad with media = material.media and ad_id. Caption: short and punchy (one line, under ~140 characters), Creative's caption or a sharper one in the same spirit; don't repeat the headline that's already in the video. If it features a new design (featured[].new_design), say it's new / a pre-order; its product URL only if link_allowed. No hashtags except #hallucinated." }
         : pillar === "agents_log" ? { events, note: "Describe only what these events say happened (the CEO's plan, proposals, the CEO's decisions and reasons, the reviewer's verdicts, ads made, publishes). Never invent a decision or a quote." }
         : pillar === "spotlight" ? { product: spot, media: spot?.image }
         : pillar === "reply_bait" ? { note: "A prompt that invites replies (people who reply get our one automated reply)." }

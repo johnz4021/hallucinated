@@ -24,7 +24,7 @@ if (process.env.STRIPE_LIVE_OK === "1") { console.error("refused: run WITHOUT ST
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const MCP_DIR = path.resolve(HERE, ".."), ROOT = path.resolve(MCP_DIR, "..");
 if (stripeClient(ROOT).mode !== "test") { console.error("refused: not the Stripe sandbox"); process.exit(1); }
-Object.assign(process.env, { ADS_TEST: "1", X_DRY_RUN: "1", MAIL_DRY_RUN: "1", X_MIN_GAP_MIN: "0", REVIEWER_AGENT: "halltest-reviewer" });
+Object.assign(process.env, { ADS_TEST: "1", X_DRY_RUN: "1", MAIL_DRY_RUN: "1", X_MIN_GAP_MIN: "0", REVIEWER_AGENT: "halltest-reviewer", ADS_MAX_IMAGES_PER_DAY: "10", ADS_MAX_VIDEOS_PER_DAY: "5" });
 const KEEP = process.argv.includes("--keep");
 const RUN = path.join(ROOT, "order-runs", new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19) + "_creative-e2e");
 const ASSETS = path.join(RUN, "assets");
@@ -91,8 +91,9 @@ log(`PLAN v${record.plan?.version}: ${JSON.stringify(record.plan?.plan)}`);
 
 // 2. Creative: by default exactly 2 image ads and 1 video ad; --images N --video 0|1 for a focused pass
 const nImg = Number((process.argv.join(" ").match(/--images (\d)/) || [])[1] ?? 2), wantVideo = !process.argv.includes("--video 0");
-const creativeMsg = tpl("creative").replace("Make 1 or 2 ads that are actually funny to SF tech people today.",
-  `TEST RUN (sandbox; nothing goes public): make exactly ${nImg} image ad${nImg === 1 ? "" : "s"}${nImg > 1 ? " from different concepts" : ""}${wantVideo ? ", and 1 video ad (step 5 is required this time; animate an image with little or no text)" : ""}. Ads that are actually funny to SF tech people today.`);
+// phase 8: code picks the kind (video <-> image). Start the test pair on video by setting the test-mode last_kind to image.
+if (wantVideo) { const { mutateAds, setLastKind } = await import("./ledger.mjs"); mutateAds(ROOT, (x) => setLastKind(x, "image")); }
+const creativeMsg = `TEST RUN (sandbox; nothing goes public): make exactly ${wantVideo ? 1 + nImg : nImg} ads this run (call next_ad_format once per ad; it picks video first, then image).\n` + tpl("creative");
 const t0 = new Date().toISOString();
 await runAgent("creative", "creative", creativeMsg, 6_000_000, 45);
 

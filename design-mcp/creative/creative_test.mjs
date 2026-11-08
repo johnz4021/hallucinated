@@ -51,8 +51,8 @@ const ev = creativeEvents(root, "2026-01-01T00:00:00Z");
 assert.deepEqual(ev.filter((e) => e.type === "ceo_plan").map((e) => e.version), [1, 2]);
 assert.ok(ev.some((e) => e.type === "ad_made" && e.caption === undefined || e.type === "ad_made"));
 
-// pillar priority: new_design > ad > rotation
-assert.equal(nextPillar({ hasNewDesign: true, hasAd: true }), "new_design");
+// pillar priority (phase 8): ad > agents_log (1/day) > reply_bait/joke; new designs go out through ads
+assert.equal(nextPillar({ hasNewDesign: true, hasAd: true }), "ad");
 assert.equal(nextPillar({ hasNewDesign: false, hasAd: true, lastRotation: "joke" }), "ad");
 assert.equal(nextPillar({ hasNewDesign: false, hasAd: false, lastRotation: "joke", agentsLogNew: true }), "agents_log");
 console.log("creative pipeline checks: OK");
