@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import SizeGuide from "@/components/SizeGuide";
-import { config, sentence } from "@/lib/config";
+import { config, shipping } from "@/lib/config";
 
 export const metadata: Metadata = { title: "Info and FAQ" };
 
@@ -18,9 +18,26 @@ export default function Info() {
         </p>
       </section>
 
+      <section id="shipping" className="info-block">
+        <h2>Shipping</h2>
+        <p>
+          US shipping is {shipping.flat()} flat, and free on orders over {shipping.freeOver()}. Orders ship within {shipping.days()} of
+          the order (pre-orders: {shipping.days()} after launch), and we email you the tracking link. International: {config.shipping.international}
+        </p>
+      </section>
+
       <section id="pickup" className="info-block">
-        <h2>Pickup and shipping</h2>
-        <p>{sentence(config.fulfilment)} We don&rsquo;t ship yet. The pickup email has the address and times.</p>
+        <h2>Pickup in San Francisco</h2>
+        <p>Free. Choose pickup at checkout and we email the address and a pickup window when your order is ready.</p>
+      </section>
+
+      <section id="returns" className="info-block">
+        <h2>Returns and exchanges</h2>
+        <p>
+          Wrong size? We&rsquo;ll exchange it within {config.shipping.returns_days} days. Anything wrong with the shirt itself: full refund.
+          Email <a href={`mailto:${config.contactEmail}`}>{config.contactEmail}</a> with your order email and what happened.
+        </p>
+        <p>If we can&rsquo;t fulfil your order for any reason, you get a full refund.</p>
       </section>
 
       <section id="preorders" className="info-block">
@@ -32,6 +49,13 @@ export default function Info() {
         <details>
           <summary>What if it never launches?</summary>
           <p>Then you&rsquo;re never charged. We only charge for pieces we actually make.</p>
+        </details>
+        <details>
+          <summary>How do I choose shipping or pickup for a pre-order?</summary>
+          <p>
+            Stripe&rsquo;s checkout can&rsquo;t take a shipping choice for something you pay for later, so we&rsquo;ll email before we
+            charge at launch and ask: US shipping ({shipping.flat()}, free over {shipping.freeOver()}) or free pickup in SF.
+          </p>
         </details>
         <details>
           <summary>Can I cancel?</summary>

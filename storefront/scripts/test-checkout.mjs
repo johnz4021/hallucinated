@@ -1,6 +1,7 @@
 // End-to-end test-mode checkout through the real UI, then verification via the Stripe API. Test keys only.
 // Usage:
-//   node scripts/test-checkout.mjs <url> order      -> bag: tee M x1 + tee L x2, pays with 4242, checks line items
+//   node scripts/test-checkout.mjs <url> order      -> bag: tee M x1 + tee L x2 (PLAN=single: tee M x1), pays with 4242,
+//                                                      ships (SHIP=pickup for pickup), checks line items + shipping
 //   node scripts/test-checkout.mjs <url> preorder   -> bag: hoodie M x1 + cap x1, saves 4242, checks customer + PM
 // Env VERCEL_OIDC=1 authenticates to a protected preview with the dev OIDC token from .env.local.
 import { chromium } from "playwright";
@@ -17,7 +18,9 @@ mkdirSync("test-output", { recursive: true });
 
 const plan = kind === "preorder"
   ? [{ slug: "wordmark-hoodie-forest", size: "M", qty: 1 }, { slug: "wordmark-cap-black", size: null, qty: 1 }]
-  : [{ slug: "git-reset-hard-tee", size: "M", qty: 1 }, { slug: "git-reset-hard-tee", size: "L", qty: 2 }];
+  : process.env.PLAN === "single"
+    ? [{ slug: "git-reset-hard-tee", size: "M", qty: 1 }]
+    : [{ slug: "git-reset-hard-tee", size: "M", qty: 1 }, { slug: "git-reset-hard-tee", size: "L", qty: 2 }];
 
 const email = `buyer+${kind}${Date.now()}@example.com`;
 const name = "Test Buyer";
@@ -49,6 +52,28 @@ try {
 
   await page.fill("#email", email);
   await page.fill("#individualName", name);
+  if (kind === "order" && (await page.locator("#shippingAddressLine1").count())) {
+    // Sandbox-only test address (not a real person's).
+    await page.fill("#shippingName", name);
+    await page.fill("#shippingAddressLine1", "1 Test Street");
+    await page.keyboard.press("Escape");
+    await page.fill("#shippingLocality", "San Francisco");
+    await page.fill("#shippingPostalCode", "94110");
+    await page.selectOption("#shippingAdministrativeArea", "CA").catch(() => {});
+    const want = (process.env.SHIP ?? "ship") === "pickup" ? /Pickup in San Francisco/ : /US shipping/;
+    const picked = await page.evaluate((src) => {
+      const re = new RegExp(src);
+      for (const input of document.querySelectorAll('input[name="shipping-rate"]')) {
+        // climb to the largest ancestor that still holds only this one option, then match its text
+        let el = input;
+        while (el.parentElement && el.parentElement.querySelectorAll('input[name="shipping-rate"]').length === 1) el = el.parentElement;
+        if (re.test(el.textContent ?? "")) { input.click(); return true; }
+      }
+      return false;
+    }, want.source);
+    if (!picked) throw new Error("shipping option not found");
+    await page.waitForTimeout(800);
+  }
   const cardTab = page.locator('[data-testid="card-accordion-item-button"]');
   if (!(await page.locator("#cardNumber").isVisible().catch(() => false)) && (await cardTab.count())) {
     await cardTab.evaluate((el) => el.click());
@@ -85,16 +110,23 @@ try {
     ok = s.status === "complete" && s.mode === "setup" && s.metadata.kind === "preorder" && items.length === 2 &&
       si?.status === "succeeded" && si?.usage === "off_session" && pm && pm.customer === s.customer?.id && result.customer_details.email === email;
   } else {
-    const s = await stripe.checkout.sessions.retrieve(sessionId, { expand: ["line_items.data.price.product"] });
+    const s = await stripe.checkout.sessions.retrieve(sessionId, { expand: ["line_items.data.price.product", "shipping_cost.shipping_rate"] });
+    const ship = s.collected_information?.shipping_details ?? s.shipping_details ?? null;
     result = {
       session_id: s.id, mode: s.mode, status: s.status, payment_status: s.payment_status, amount_total: s.amount_total,
       metadata: s.metadata, invoice: s.invoice,
+      shipping_rate: s.shipping_cost?.shipping_rate?.display_name ?? null,
+      shipping_rate_fulfilment: s.shipping_cost?.shipping_rate?.metadata?.fulfilment ?? null,
+      shipping_amount: s.shipping_cost?.amount_total ?? null,
+      shipping_details_present: !!ship?.address?.line1,
+      shipping_city: ship?.address?.city ?? null,
       customer_details: { email: s.customer_details?.email, name: s.customer_details?.name },
       line_items: s.line_items.data.map((li) => ({ qty: li.quantity, price: li.price.id, price_metadata: li.price.metadata, product: li.price.product.name, product_status: li.price.product.metadata.status })),
     };
-    ok = s.status === "complete" && s.payment_status === "paid" && s.metadata.kind === "order" && s.line_items.data.length === 2 &&
+    ok = s.status === "complete" && s.payment_status === "paid" && s.metadata.kind === "order" && s.line_items.data.length === plan.length &&
       s.line_items.data.every((li) => li.price.metadata.size && li.price.metadata.design_id && li.price.metadata.garment && li.price.metadata.color && li.price.metadata.drop) &&
-      result.customer_details.email === email && result.customer_details.name === name;
+      result.customer_details.email === email && result.customer_details.name === name &&
+      (!s.shipping_cost || (result.shipping_details_present && s.metadata.fulfilment === result.shipping_rate_fulfilment));
   }
   console.log(JSON.stringify(result, null, 2));
   console.log(ok ? "PASS" : "FAIL");

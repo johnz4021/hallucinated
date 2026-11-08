@@ -8,7 +8,7 @@ import SizeGuide from "@/components/SizeGuide";
 import WhyPanel from "@/components/WhyPanel";
 import SeenIn from "@/components/SeenIn";
 import { dropNumber, getCatalog, getProduct, isAgentDesign } from "@/lib/catalog";
-import { config, formatPrice, windowLabel } from "@/lib/config";
+import { config, formatPrice, shipping, windowLabel } from "@/lib/config";
 import { getContent, visibleCampaigns } from "@/lib/content";
 
 export const revalidate = 60;
@@ -66,6 +66,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
             variants={p.variants.map(({ priceId, size, unitAmount }) => ({ priceId, size, unitAmount }))}
             fulfilment={config.fulfilment}
             agent={agent}
+            shippingLine={shipping.oneLiner()}
           />
           <div className="pdp-details">
             <p>{p.description}</p>
@@ -85,14 +86,24 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
                     : "Our wordmark, put on new blanks by the agents for drop 2. The ops agent orders the run once pre-orders are in; a human approves the spend."}
               </p>
             </details>
+            {p.status === "preorder" && (
+              <details>
+                <summary>How pre-orders work</summary>
+                <p>
+                  Your card is saved at checkout and charged only if it launches{when ? ` (${when.toLowerCase()})` : ""}. If it never
+                  launches, you&rsquo;re never charged. To cancel before launch, email {config.contactEmail}.
+                </p>
+              </details>
+            )}
             <details>
-              <summary>{p.status === "preorder" ? "Pre-orders and pickup" : "Pickup and shipping"}</summary>
-              <p>
-                {p.status === "preorder"
-                  ? `Your card is saved at checkout and charged only if it launches${when ? ` (${when.toLowerCase()})` : ""}. If it never launches, you're never charged. To cancel before launch, email ${config.contactEmail}. `
-                  : ""}
-                {config.fulfilment}. No shipping yet.
-              </p>
+              <summary>Shipping &amp; pickup</summary>
+              <ul className="ship-list">
+                <li>US shipping: {shipping.flat()} flat, free on orders over {shipping.freeOver()}. Ships within {shipping.days()}{p.status === "preorder" ? " of launch" : ""}, with tracking by email.</li>
+                <li>Pickup in San Francisco: free. We email the address and a pickup window.</li>
+                <li>Outside the US: {config.shipping.international}</li>
+                {p.status === "preorder" && <li>Pre-orders: Checkout can&rsquo;t take a shipping choice for something you pay for later, so we&rsquo;ll ask whether you want shipping or pickup before we charge at launch.</li>}
+                <li>Wrong size? Exchange it within {config.shipping.returns_days} days. Anything wrong with the shirt: full refund. <Link href="/info#returns">Returns</Link></li>
+              </ul>
             </details>
           </div>
         </div>

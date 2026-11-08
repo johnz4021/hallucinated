@@ -24,7 +24,8 @@ export default function Footer() {
         <nav aria-label="Help">
           <h2>Help</h2>
           <ul>
-            <li><Link href="/info#pickup">Pickup and shipping</Link></li>
+            <li><Link href="/info#shipping">Shipping and pickup</Link></li>
+            <li><Link href="/info#returns">Returns and exchanges</Link></li>
             <li><Link href="/info#preorders">How pre-orders work</Link></li>
             <li><Link href="/info#size-guide">Size guide</Link></li>
             <li><a href={`mailto:${config.contactEmail}`}>{config.contactEmail}</a></li>

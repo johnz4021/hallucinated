@@ -2,21 +2,22 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import type Stripe from "stripe";
 import ClearCart from "@/components/ClearCart";
-import { config, datedWindows, formatPrice, sentence } from "@/lib/config";
+import { config, datedWindows, formatPrice, sentence, shipping } from "@/lib/config";
+import { fulfilmentOf } from "@/lib/shipping";
 import { getStripe } from "@/lib/stripe";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Thanks", robots: { index: false } };
 
 type View =
-  | { kind: "order"; name: string | null; email: string | null; total: number; currency: string; lines: string[] }
+  | { kind: "order"; name: string | null; email: string | null; total: number; currency: string; lines: string[]; fulfilment: "ship" | "pickup" | null }
   | { kind: "preorder"; name: string | null; email: string | null; total: number; window: string; lines: string[] };
 
 async function load(id?: string): Promise<View | null> {
   if (!id || !/^cs_(test|live)_[A-Za-z0-9]+$/.test(id)) return null;
   try {
     const stripe = getStripe();
-    const s = await stripe.checkout.sessions.retrieve(id, { expand: ["line_items.data.price.product"] });
+    const s = await stripe.checkout.sessions.retrieve(id, { expand: ["line_items.data.price.product", "shipping_cost.shipping_rate"] });
     const name = s.customer_details?.name ?? null;
     const email = s.customer_details?.email ?? null;
     if (s.mode === "setup" && s.status === "complete") {
@@ -35,7 +36,15 @@ async function load(id?: string): Promise<View | null> {
         const size = pr?.metadata?.size ?? s.metadata?.size ?? "";
         return `${li.quantity} × ${(pr?.product as Stripe.Product | undefined)?.name ?? li.description}${size ? `, size ${size}` : ""}`;
       });
-      return { kind: "order", name, email, total: s.amount_total ?? 0, currency: s.currency ?? config.currency, lines };
+      // Record the chosen method as metadata.fulfilment (ship|pickup) on the session and its PaymentIntent.
+      // Never copies the address anywhere; it stays in Stripe.
+      const fulfilment = fulfilmentOf(s);
+      if (fulfilment && s.metadata?.fulfilment !== fulfilment) {
+        await stripe.checkout.sessions.update(s.id, { metadata: { fulfilment } }).catch((e) => console.error("session fulfilment tag:", (e as Error).message));
+        const pi = typeof s.payment_intent === "string" ? s.payment_intent : s.payment_intent?.id;
+        if (pi) await stripe.paymentIntents.update(pi, { metadata: { fulfilment } }).catch(() => {});
+      }
+      return { kind: "order", name, email, total: s.amount_total ?? 0, currency: s.currency ?? config.currency, lines, fulfilment };
     }
   } catch {}
   return null;
@@ -57,10 +66,18 @@ export default async function Success({ searchParams }: { searchParams: Promise<
           {v.kind === "preorder" ? (
             <p>
               Nothing was charged today. We&rsquo;ll charge {formatPrice(v.total)} to the card you saved only if it launches
-              {v.window ? ` (est. ${v.window})` : ""}. If it never launches, you&rsquo;re never charged. To cancel, email {config.contactEmail}.
+              {v.window ? ` (est. ${v.window})` : ""}. If it never launches, you&rsquo;re never charged. Before we charge, we&rsquo;ll email
+              to ask whether you want US shipping or free SF pickup. To cancel, email {config.contactEmail}.
             </p>
           ) : (
-            <p>{formatPrice(v.total, v.currency)} paid. {sentence(config.fulfilment)}</p>
+            <p>
+              {formatPrice(v.total, v.currency)} paid.{" "}
+              {v.fulfilment === "pickup"
+                ? "You chose free pickup in SF: we'll email the address and a pickup window when your order is ready."
+                : v.fulfilment === "ship"
+                  ? `We'll ship it within ${shipping.days()} and email you the tracking link.`
+                  : sentence(config.fulfilment)}
+            </p>
           )}
           {v.email && <p>Updates go to {v.email}.</p>}
         </>

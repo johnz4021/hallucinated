@@ -74,7 +74,7 @@ export default function CartView({ fulfilment, contact }: { fulfilment: string; 
         </div>
         <p className="sum-note">
           {pre
-            ? `Pre-order: you save a card now and we charge ${money(cart.subtotal)} only if it launches${windows ? ` (est. ${windows})` : ""}. Never launches, never charged. Cancel before launch: ${contact}.`
+            ? `Pre-order: you save a card now and we charge ${money(cart.subtotal)} only if it launches${windows ? ` (est. ${windows})` : ""}. Never launches, never charged. We'll ask shipping or pickup before we charge. Cancel before launch: ${contact}.`
             : fulfilment}
         </p>
         <button type="button" className="cta" onClick={checkout} disabled={busy}>

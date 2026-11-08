@@ -14,9 +14,10 @@ type Props = {
   variants: { priceId: string; size: string; unitAmount: number }[];
   fulfilment: string;
   agent?: boolean;
+  shippingLine?: string;
 };
 
-export default function ProductBuy({ slug, name, image, kind, launchWindow, variants, fulfilment, agent = false }: Props) {
+export default function ProductBuy({ slug, name, image, kind, launchWindow, variants, fulfilment, agent = false, shippingLine }: Props) {
   const cart = useCart();
   const single = variants.length === 1;
   const [size, setSize] = useState<string | null>(single ? variants[0].size : null);
@@ -86,13 +87,16 @@ export default function ProductBuy({ slug, name, image, kind, launchWindow, vari
       )}
 
       {kind === "preorder" ? (
-        <p className="buy-note">
-          {agent ? "Designed by the agents. " : ""}Pre-order: you&rsquo;re charged {money(price * qty)} only if it launches
-          {isDatedWindow(launchWindow) ? ` (est. ${launchWindow})` : ""}. If it never launches, you&rsquo;re never charged. We save your card
-          at checkout; nothing is charged today. <Link href="/info#preorders">How pre-orders work</Link>
-        </p>
+        <>
+          <p className="buy-note">
+            {agent ? "Designed by the agents. " : ""}Pre-order: you&rsquo;re charged {money(price * qty)} only if it launches
+            {isDatedWindow(launchWindow) ? ` (est. ${launchWindow})` : ""}. If it never launches, you&rsquo;re never charged. We save your card
+            at checkout; nothing is charged today. <Link href="/info#preorders">How pre-orders work</Link>
+          </p>
+          {shippingLine && <p className="buy-note ship-line">{shippingLine}. We ask shipping or pickup before we charge.</p>}
+        </>
       ) : (
-        <p className="buy-note">{fulfilment}</p>
+        <p className="buy-note ship-line">{shippingLine ?? fulfilment}</p>
       )}
     </div>
   );

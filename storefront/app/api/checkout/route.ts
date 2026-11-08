@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type Stripe from "stripe";
-import { config, datedWindows, formatPrice } from "@/lib/config";
+import { config, datedWindows, formatPrice, shipping } from "@/lib/config";
+import { shippingOptionsFor } from "@/lib/shipping";
 import { getStripe } from "@/lib/stripe";
 
 export const runtime = "nodejs";
@@ -80,14 +81,23 @@ export async function POST(req: Request) {
         metadata.design_id = lines[0].price.metadata.design_id ?? "";
         metadata.size = lines[0].price.metadata.size;
       }
+      const subtotal = lines.reduce((s, l) => s + l.price.unit_amount! * l.quantity, 0);
+      // The customer picks shipping or pickup inside Checkout; the chosen rate's metadata.fulfilment says which,
+      // and the success page copies it onto the session/PaymentIntent metadata as `fulfilment`.
+      metadata.fulfilment_options = "ship,pickup";
       session = await stripe.checkout.sessions.create({
         ...common,
         mode: "payment",
         line_items: lines.map((l) => ({ price: l.price.id, quantity: l.quantity })),
+        shipping_address_collection: { allowed_countries: config.shipping.countries as Stripe.Checkout.SessionCreateParams.ShippingAddressCollection.AllowedCountry[] },
+        shipping_options: await shippingOptionsFor(subtotal),
         metadata,
         payment_intent_data: { metadata },
         invoice_creation: { enabled: true, invoice_data: { metadata } },
-        custom_text: { submit: { message: sentence(config.fulfilment) } },
+        custom_text: {
+          shipping_address: { message: `Picking up in SF instead? Choose pickup below; we only use this address if we ship.` },
+          submit: { message: `US shipping takes ${shipping.days()} with tracking; orders over ${shipping.freeOver()} ship free. SF pickup is free.` },
+        },
       });
     } else {
       const total = lines.reduce((s, l) => s + l.price.unit_amount! * l.quantity, 0);
@@ -118,7 +128,7 @@ export async function POST(req: Request) {
               `${lines.every((l) => l.product.metadata.origin === "agents") ? "Designed by the agents. " : ""}` +
               `Pre-order: ${what}. You'll be charged ${formatPrice(total)} only if it launches` +
               `${windows ? ` (est. ${windows})` : ""}. If it never launches, you're never charged. ` +
-              `Cancel any time before launch: email ${config.contactEmail}.`,
+              `Cancel any time before launch: email ${config.contactEmail}. Before we charge, we'll ask whether you want US shipping or SF pickup.`,
           },
         },
       });

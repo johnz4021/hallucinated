@@ -76,4 +76,27 @@ for (const item of seed.products.filter((p) => !only || only.includes(p.slug))) 
   for (const id of new Set(toArchive)) await stripe.prices.update(id, { active: false });
   report.push({ slug: item.slug, status: item.status, product_id: product.id, prices, ...(legacyId ? { legacy_price: legacyId } : {}) });
 }
-console.log(JSON.stringify({ mode, products: report }, null, 2));
+// Shipping rates (store.config.json "shipping.rates"), found by metadata.key. Stripe can't change a rate's
+// amount or name, so a changed rate is created anew and the old one deactivated.
+const shippingReport = {};
+const allRates = [];
+for await (const r of stripe.shippingRates.list({ limit: 100 })) allRates.push(r);
+for (const rate of Object.values(cfg.shipping.rates)) {
+  const want = {
+    display_name: rate.name,
+    type: "fixed_amount",
+    fixed_amount: { amount: rate.amount, currency: cfg.shipping.currency },
+    tax_behavior: "unspecified",
+    metadata: { key: rate.key, fulfilment: rate.fulfilment },
+    ...(rate.min_days ? { delivery_estimate: { minimum: { unit: "business_day", value: rate.min_days }, maximum: { unit: "business_day", value: rate.max_days } } } : {}),
+  };
+  const same = (r) =>
+    r.metadata.key === rate.key && r.active && r.display_name === rate.name && r.fixed_amount?.amount === rate.amount &&
+    (r.delivery_estimate?.minimum?.value ?? null) === (rate.min_days ?? null) && (r.delivery_estimate?.maximum?.value ?? null) === (rate.max_days ?? null);
+  let found = allRates.find(same);
+  if (!found) found = await stripe.shippingRates.create(want);
+  for (const r of allRates) if (r.metadata.key === rate.key && r.active && r.id !== found.id) await stripe.shippingRates.update(r.id, { active: false });
+  shippingReport[rate.key] = found.id;
+}
+
+console.log(JSON.stringify({ mode, products: report, shipping_rates: shippingReport }, null, 2));

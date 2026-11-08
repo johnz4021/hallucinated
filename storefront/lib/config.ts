@@ -13,6 +13,7 @@ export const config = {
   categories: raw.categories,
   sizeOrder: raw.size_order,
   blobHost: raw.blob_host,
+  shipping: raw.shipping,
   storeHosts: raw.store_hosts,
 };
 
@@ -42,3 +43,11 @@ export function localImage(src: string) {
   } catch {}
   return { src, unoptimized: false };
 }
+
+// Shipping copy, all derived from store.config.json "shipping".
+export const shipping = {
+  freeOver: () => formatPrice(raw.shipping.free_threshold),
+  flat: () => formatPrice(raw.shipping.rates.ship.amount),
+  days: () => `${raw.shipping.rates.ship.min_days}–${raw.shipping.rates.ship.max_days} business days`,
+  oneLiner: () => `Free US shipping over ${formatPrice(raw.shipping.free_threshold)} · SF pickup free`,
+};

@@ -1,8 +1,8 @@
 {
   "_comment": "Site-wide settings. Products and prices live in Stripe (see CONTENT.md); banners and lookbook live in content.json on Vercel Blob.",
   "currency": "usd",
-  "fulfilment": "Pickup in SF (we'll email you when your shirt is ready)",
-  "fulfilment_short": "Pickup in SF",
+  "fulfilment": "US shipping or free pickup in SF. You choose at checkout.",
+  "fulfilment_short": "Ships in the US or pick up in SF",
   "contact_email": "hallucinated@agentmail.to",
   "x_url": "https://x.com/hallucinateddpt",
   "x_handle": "@hallucinateddpt",
@@ -43,5 +43,39 @@
   "blob_host": "x2ww2cgnt2vbaqob.public.blob.vercel-storage.com",
   "store_hosts": [
     "hallucinated-store.vercel.app"
-  ]
+  ],
+  "shipping": {
+    "_comment": "All shipping copy and Stripe shipping rates come from here. After changing a rate, run `npm run setup-stripe` (new rate, old one deactivated).",
+    "countries": [
+      "US"
+    ],
+    "currency": "usd",
+    "free_threshold": 7500,
+    "returns_days": 30,
+    "international": "Not yet. US addresses only for now.",
+    "rates": {
+      "ship": {
+        "key": "hallucinated-ship-us",
+        "fulfilment": "ship",
+        "name": "US shipping: 7–10 business days",
+        "amount": 600,
+        "min_days": 7,
+        "max_days": 10
+      },
+      "ship_free": {
+        "key": "hallucinated-ship-us-free",
+        "fulfilment": "ship",
+        "name": "Free US shipping: 7–10 business days",
+        "amount": 0,
+        "min_days": 7,
+        "max_days": 10
+      },
+      "pickup": {
+        "key": "hallucinated-pickup-sf",
+        "fulfilment": "pickup",
+        "name": "Pickup in San Francisco: free (we email the address and window)",
+        "amount": 0
+      }
+    }
+  }
 }
