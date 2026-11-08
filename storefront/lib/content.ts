@@ -8,7 +8,7 @@ import type { Content } from "./content-schema";
 export const CONTENT_PREFIX = "content/v/";
 const KEEP = 20;
 
-const EMPTY: Content = { version: 1, updated_at: "1970-01-01T00:00:00.000Z", banners: [], lookbook: [], drops: [], designs: [], campaigns: [] };
+const EMPTY: Content = { version: 1, updated_at: "1970-01-01T00:00:00.000Z", banners: [], lookbook: [], drops: [], designs: [], campaigns: [], launches: [] };
 
 export class ContentConflict extends Error {}
 
@@ -55,7 +55,7 @@ export const getContent = unstable_cache(
       return EMPTY;
     }
   },
-  ["content-v4"],
+  ["content-v5"],
   { revalidate: 3600, tags: ["content"] },
 );
 
@@ -68,5 +68,13 @@ export function visibleCampaigns(c: Content) {
   const tests = showTestContent();
   return (c.campaigns ?? [])
     .filter((x) => x.active !== false && (tests || !x.test))
+    .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
+}
+
+// Launch images for products in this deployment's catalog (test ones only off production), newest first.
+export function visibleLaunches(c: Content, liveSlugs: Set<string>) {
+  const tests = showTestContent();
+  return (c.launches ?? [])
+    .filter((l) => l.active !== false && (tests || !l.test) && liveSlugs.has(l.slug) && l.images?.length)
     .sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at));
 }

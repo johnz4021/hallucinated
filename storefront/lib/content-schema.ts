@@ -63,6 +63,15 @@ export type Campaign = {
   test: boolean;
   active?: boolean;
 };
+export type Launch = {
+  id: string; // = slug
+  slug: string;
+  title?: string;
+  images: { url: string; alt: string; kind: "on_model" }[];
+  created_at: string;
+  test: boolean;
+  active?: boolean;
+};
 export type Content = {
   version: 1;
   updated_at: string;
@@ -72,9 +81,10 @@ export type Content = {
   drops: Drop[];
   designs: Design[];
   campaigns: Campaign[];
+  launches: Launch[];
 };
 
-export const COLLECTIONS = ["banners", "lookbook", "drops", "designs", "campaigns"] as const;
+export const COLLECTIONS = ["banners", "lookbook", "drops", "designs", "campaigns", "launches"] as const;
 export type Collection = (typeof COLLECTIONS)[number];
 
 const isStr = (v: unknown, max = 500) => typeof v === "string" && v.length > 0 && v.length <= max;
@@ -86,6 +96,22 @@ const isIso = (v: unknown) => typeof v === "string" && !Number.isNaN(Date.parse(
 
 export function validateItem(collection: Collection, item: Record<string, unknown>): string | null {
   if (!item || typeof item !== "object") return "item must be an object";
+  if (collection === "launches") {
+    if (!isStr(item.slug, 80) || !/^[a-z0-9-]+$/.test(item.slug as string)) return "slug: lowercase letters, digits and dashes";
+    if (item.id !== undefined && item.id !== item.slug) return "launches are keyed by slug (id must equal slug or be omitted)";
+    if (!optStr(item.title, 120)) return "title max 120";
+    const ours = (v: unknown) => typeof v === "string" && /^https:\/\/[a-z0-9]+\.public\.blob\.vercel-storage\.com\/media\/[^\s?#]+$/.test(v);
+    if (!Array.isArray(item.images) || item.images.length < 1 || item.images.length > 6) return "images: 1 to 6";
+    for (const im of item.images as { url?: unknown; alt?: unknown; kind?: unknown }[]) {
+      if (!im || !ours(im.url)) return "each image url must be on our Blob store (…public.blob.vercel-storage.com/media/…)";
+      if (!isStr(im.alt, 300)) return "each image needs alt (max 300)";
+      if (im.kind !== "on_model") return 'image kind must be "on_model"';
+    }
+    if (!isIso(item.created_at)) return "created_at must be an ISO time";
+    if (typeof item.test !== "boolean") return "test must be true or false";
+    if (item.active !== undefined && typeof item.active !== "boolean") return "active must be true or false";
+    return null;
+  }
   if (collection === "campaigns") {
     if (!isStr(item.id, 80) || !/^[a-z0-9-]+$/.test(item.id as string)) return "id: lowercase letters, digits and dashes (max 80)";
     if (item.kind !== "image" && item.kind !== "video") return "kind: image | video";
@@ -154,7 +180,7 @@ export function validateContent(c: unknown): string | null {
   const doc = c as Content;
   if (!doc || typeof doc !== "object") return "content must be an object";
   for (const col of COLLECTIONS) {
-    if ((col === "designs" || col === "campaigns") && doc[col] === undefined) continue;
+    if ((col === "designs" || col === "campaigns" || col === "launches") && doc[col] === undefined) continue;
     if (!Array.isArray(doc[col])) return `${col} must be an array`;
     for (const item of doc[col]) {
       const err = validateItem(col, item as unknown as Record<string, unknown>);

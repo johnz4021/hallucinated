@@ -3,7 +3,7 @@ import Link from "next/link";
 import { isAgentDesign, type Product } from "@/lib/catalog";
 import { formatPrice, localImage, windowLabel } from "@/lib/config";
 
-export default function ProductCard({ p, priority = false }: { p: Product; priority?: boolean }) {
+export default function ProductCard({ p, priority = false, hoverImage }: { p: Product; priority?: boolean; hoverImage?: string }) {
   const img = p.images[0] ? localImage(p.images[0]) : null;
   const agent = isAgentDesign(p);
   return (
@@ -11,6 +11,9 @@ export default function ProductCard({ p, priority = false }: { p: Product; prior
       <div className="card-img">
         {img && (
           <Image src={img.src} unoptimized={img.unoptimized} alt={p.name} fill sizes="(max-width: 700px) 50vw, (max-width: 1100px) 33vw, 25vw" priority={priority} />
+        )}
+        {hoverImage && (
+          <Image className="card-hover" src={hoverImage} alt="" fill sizes="(max-width: 700px) 50vw, (max-width: 1100px) 33vw, 25vw" />
         )}
         <span className="badges">
           {agent && <span className="badge badge-agents">Designed by the agents</span>}

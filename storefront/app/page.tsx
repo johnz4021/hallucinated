@@ -5,7 +5,7 @@ import Hero from "@/components/Hero";
 import ProductCard from "@/components/ProductCard";
 import { getCatalog, isAgentDesign } from "@/lib/catalog";
 import { config } from "@/lib/config";
-import { activeSorted, getContent, visibleCampaigns } from "@/lib/content";
+import { activeSorted, getContent, visibleLaunches } from "@/lib/content";
 import { localImage } from "@/lib/config";
 import type { Banner } from "@/lib/content-schema";
 
@@ -20,38 +20,42 @@ const PIPELINE = [
   { who: "growth", did: "The growth agent makes the ads and posts them on X." },
   { who: "ops", did: "Paid orders are batched into a print run; a human pays the print shop and approves the courier." },
 ];
-// Hero headlines: no trailing hashtags, at most ~70 chars cut at a word. Full captions live on /campaigns.
-function heroCaption(caption: string, max = 70) {
-  const clean = caption.replace(/(\s+#[\w-]+)+\s*$/u, "").trim();
-  if (clean.length <= max) return clean;
-  const cut = clean.slice(0, max + 1);
-  const at = cut.lastIndexOf(" ");
-  return `${(at > 30 ? cut.slice(0, at) : clean.slice(0, max)).replace(/[\s,.;:—–-]+$/u, "")}…`;
-}
-
 export default async function Home() {
   const [catalog, content] = await Promise.all([getCatalog(), getContent()]);
   const live = new Set(catalog.map((p) => p.slug));
-  // Hero: the newest 1-3 agent ads first, then the curated banners (test ads only off production).
-  const adSlides: Banner[] = visibleCampaigns(content)
-    .filter((c) => c.kind === "image")
-    .slice(0, 3)
-    .map((c) => {
-      const slug = c.featured_products.find((s) => live.has(s));
-      return {
-        id: `ad-${c.id}`,
-        title: heroCaption(c.caption),
-        image: c.media_url,
-        image_alt: `Ad by the agents: ${c.caption}`,
-        cta_label: slug ? "Shop the shirt" : "See all the ads",
-        cta_href: slug ? `/p/${slug}` : "/campaigns",
-        focus: "right",
-        fit: "contain",
-        kicker: c.test ? "Ad by the agents (test)" : "Ad by the agents",
-      };
-    });
-  const banners = [...adSlides, ...activeSorted(content.banners).slice(0, 3)];
-  const lookbook = activeSorted(content.lookbook);
+  // Hero: the newest launch (on-model shot of a new design) leads, then the curated banners.
+  const launches = visibleLaunches(content, live);
+  const launchSlides: Banner[] = launches.slice(0, 1).map((l) => {
+    const p = catalog.find((x) => x.slug === l.slug);
+    const title = l.title ?? p?.name ?? l.slug;
+    return {
+      id: `launch-${l.slug}`,
+      title: `New: ${title}`,
+      subtitle: p?.status === "preorder" ? "Fresh from the agents. Pre-order now; you're charged only if it launches." : "Fresh from the agents.",
+      image: l.images[0].url,
+      image_alt: l.images[0].alt,
+      cta_label: "Shop the drop",
+      cta_href: `/p/${l.slug}`,
+      focus: "right",
+      fit: "contain",
+      kicker: l.test ? "New drop (test)" : "New drop",
+    };
+  });
+  const banners = [...launchSlides, ...activeSorted(content.banners).slice(0, 3)];
+  // Lookbook: recent launch shots first (newest first), then the curated lookbook.
+  const lookbook = [
+    ...launches.slice(0, 6).flatMap((l) =>
+      l.images.slice(0, 2).map((im, i) => ({
+        id: `launch-${l.slug}-${i}`,
+        image: im.url,
+        alt: im.alt,
+        caption: l.title ?? catalog.find((x) => x.slug === l.slug)?.name ?? l.slug,
+        product_slug: l.slug,
+      })),
+    ),
+    ...activeSorted(content.lookbook),
+  ];
+  const hoverBySlug = new Map(launches.map((l) => [l.slug, l.images[0].url]));
   const latest = [...catalog].sort((a, b) => b.created - a.created).slice(0, 6);
   const agentCount = catalog.filter(isAgentDesign).length;
   // Newest CEO verdict on a design that is actually in this deployment's catalog.
@@ -78,7 +82,7 @@ export default async function Home() {
           <Link href="/shop" className="section-link">Shop everything</Link>
         </div>
         {latest.length ? (
-          <div className="grid">{latest.map((p, n) => <ProductCard key={p.id} p={p} priority={n < 2} />)}</div>
+          <div className="grid">{latest.map((p, n) => <ProductCard key={p.id} p={p} priority={n < 2} hoverImage={hoverBySlug.get(p.slug)} />)}</div>
         ) : (
           <p className="empty">The shelves are empty right now. The agents are working on it.</p>
         )}

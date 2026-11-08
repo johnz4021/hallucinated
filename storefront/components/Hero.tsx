@@ -42,7 +42,11 @@ export default function Hero({ banners }: { banners: Banner[] }) {
           </div>
           <div className="hero-copy">
             {b.kicker && <p className="hero-kicker">{b.kicker}</p>}
-            <h2 className={`hero-title${b.title.length > 40 ? " long" : ""}`}>{b.title}</h2>
+            <h2 className={`hero-title${b.title.length > 40 ? " long" : ""}`}>
+              {b.title.split(" ").map((w, k) => (
+                <span key={k}>{k > 0 && " "}{w.includes("-") ? <span className="nw">{w}</span> : w}</span>
+              ))}
+            </h2>
             {b.subtitle && <p className="hero-sub">{b.subtitle}</p>}
             {b.cta_href && (
               <Link href={b.cta_href} className="btn" tabIndex={n === i ? 0 : -1}>

@@ -6,10 +6,9 @@ import ProductBuy from "@/components/ProductBuy";
 import ProductCard from "@/components/ProductCard";
 import SizeGuide from "@/components/SizeGuide";
 import WhyPanel from "@/components/WhyPanel";
-import SeenIn from "@/components/SeenIn";
 import { dropNumber, getCatalog, getProduct, isAgentDesign } from "@/lib/catalog";
 import { config, formatPrice, shipping, windowLabel } from "@/lib/config";
-import { getContent, visibleCampaigns } from "@/lib/content";
+import { getContent, visibleLaunches } from "@/lib/content";
 
 export const revalidate = 60;
 export const dynamicParams = true;
@@ -36,7 +35,9 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
   // A dossier shows only for a product that exists in this deployment's own catalog (we're on its page).
   const dossier = agent ? ((await getContent()).designs ?? []).find((d) => d.slug === p.slug) ?? null : null;
   const when = windowLabel(p.launchWindow);
-  const seenIn = visibleCampaigns(await getContent()).filter((c) => c.featured_products.includes(p.slug)).slice(0, 3);
+  // On-model launch shots first, then the Stripe mockups.
+  const launch = visibleLaunches(await getContent(), new Set([p.slug]))[0];
+  const gallery = [...new Set([...(launch?.images.map((im) => im.url) ?? []), ...p.images])].slice(0, 12);
 
   return (
     <div className="wrap page">
@@ -45,7 +46,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
         {cat && <> / <Link href={`/shop?category=${cat.slug}`}>{cat.label}</Link></>}
       </nav>
       <div className="pdp">
-        <Gallery images={p.images} name={p.name} />
+        <Gallery images={gallery} name={p.name} />
         <div className="pdp-info">
           {p.status === "preorder" ? (
             <p className="kicker">
@@ -109,7 +110,6 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
         </div>
       </div>
       {dossier && <WhyPanel d={dossier} />}
-      <SeenIn ads={seenIn} />
       {more.length > 0 && (
         <section className="section" aria-labelledby="more-title">
           <div className="section-head"><h2 id="more-title">More from Hallucinated</h2></div>

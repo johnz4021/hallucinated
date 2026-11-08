@@ -551,3 +551,7 @@ details > p, details > table { margin: 0 0 16px; }
 /* Shipping */
 .ship-list { margin: 0 0 16px; padding-left: 18px; display: grid; gap: 6px; font-size: 15px; }
 .ship-line { color: var(--sand); }
+
+/* Card hover: on-model launch shot */
+.card-img .card-hover { opacity: 0; transition: opacity 250ms ease; object-fit: cover; }
+.card:hover .card-img .card-hover, .card:focus-visible .card-img .card-hover { opacity: 1; }

@@ -337,3 +337,50 @@ curl -s -X PATCH $STORE/api/admin/content -H "Authorization: Bearer $STORE_ADMIN
 - The rules in §2.4 apply: fictional people only, no real people or look-alikes, no real brands or logos except ours.
 - Our shirts may appear only as our real designs.
 - **Event ads:** link the real sources the agent used, and roast the moment, not a person.
+
+---
+
+## 6. Launch images: on-model shots of new designs
+
+After a design is approved and published (§4), the agents generate 2–3 photos of the shirt on people and attach them to the product. The store then uses them:
+- **Home hero:** the newest launch leads ("New: <title>", "Shop the drop" → the product), before the curated banners;
+- **Product gallery:** on-model shots first, then the mockups (back, front, flat) from the Stripe product;
+- **Lookbook strip:** recent launch shots, newest first, mixed in with the curated lookbook;
+- **"This week from the agents" cards:** the first on-model shot appears as the hover image.
+
+The Stripe product's `images` are not touched (they stay the mockups, ≤ 8). Launch images live in the content store as a `launches` collection keyed by product slug.
+
+### Step 1. Upload each image
+Use §2.1 (`POST $STORE/api/admin/upload?name=<slug>-launch-1`, ≤ 4.4 MB) or §5's `/api/admin/ingest` for a URL.
+- **Format:** JPEG, quality ~85, portrait 2:3 (1024×1536) or 4:5.
+- **Content:** the shirt as printed (back or front, matching the design's placement), on a fictional person, no real people or brands (§2.4).
+- **Check:** the print must match the real design. Reject garbled text.
+
+### Step 2. Attach them to the product
+```bash
+curl -s -X PATCH $STORE/api/admin/content -H "Authorization: Bearer $STORE_ADMIN_SECRET" -H "Content-Type: application/json" -d '{
+  "op": "upsert", "collection": "launches",
+  "item": {
+    "slug": "<product slug>",
+    "title": "<product title, optional; defaults to the Stripe name>",
+    "images": [
+      { "url": "<Blob url from step 1>", "alt": "<what the photo shows>", "kind": "on_model" },
+      { "url": "<…>", "alt": "<…>", "kind": "on_model" }
+    ],
+    "created_at": "2026-11-08T18:20:00Z",
+    "test": false
+  } }'
+```
+
+| field | rules |
+|---|---|
+| `slug` | the product's `metadata.slug` (also the item's id). Upserting the same slug replaces `images` and merges the other fields. |
+| `images` | 1–6 items. `url` must be on our Blob store under `media/`; `alt` is required, ≤ 300 chars; `kind` is `"on_model"`. Order = display order. |
+| `title` | optional, ≤ 120 |
+| `created_at` | ISO time; the newest launch leads the hero |
+| `test` | `true` = shown on previews and locally only, never in production |
+| `active` | optional; `false` hides it |
+
+- **Remove:** `{"op":"remove","collection":"launches","id":"<slug>"}`
+- **Visibility:** a launch shows only when its slug is an active product in that deployment's own Stripe catalog (so sandbox tests stay off production), and not `test` in production.
+- Every write revalidates the site, so no separate call is needed.
