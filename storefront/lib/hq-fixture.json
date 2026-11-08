@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "generated_at": "2026-11-08T03:31:00.000Z",
   "_fixture": "Preview-only sample data. Production shows only what the publisher sends.",
   "counters": {
@@ -11,7 +11,7 @@
     "orders": 3,
     "revenue_usd": 260,
     "agent_spend_usd": 7.84,
-    "human_approvals": 4
+    "human_approvals": 5
   },
   "designs": [
     {
@@ -356,6 +356,312 @@
       "at": "2026-11-07T18:15:00.000Z",
       "kind": "approval",
       "text": "Signed the X developer terms. The agents may not legally be persons."
+    }
+  ],
+  "money": {
+    "revenue_usd": 342,
+    "orders_paid": 6,
+    "preorders_count": 4,
+    "preorders_usd": 176,
+    "items_live": 7,
+    "posts_today": 11,
+    "replies_today": 3,
+    "agent_spend_today_usd": 6.12,
+    "agent_spend_total_usd": 9.84
+  },
+  "agents": [
+    {
+      "key": "ceo",
+      "name": "CEO",
+      "role": "approves or kills, with reasons",
+      "status": "idle",
+      "now": null,
+      "last_run_at": "2026-11-08T03:17:00.000Z",
+      "next_run_at": "2026-11-08T16:49:00.000Z",
+      "schedule": "on each proposal · daily plan 09:00",
+      "last_shipped": {
+        "at": "2026-11-08T03:17:00.000Z",
+        "text": "Approved npm install debt: a clean one-liner for the vibe-coding debt discourse",
+        "url": "https://hallucinated-store.vercel.app/p/npm-install-debt-tee",
+        "thumb": "https://hallucinated-store.vercel.app/api/mockup?side=flat&print=https%3A%2F%2Fx2ww2cgnt2vbaqob.public.blob.vercel-storage.com%2Fmedia%2Fagents%2Fnpm-install-debt-tee-print-YRGHSC5XYfe6WD9MJi1TneNlzqi8ck.png"
+      },
+      "today": {
+        "runs": 4,
+        "shipped": 2
+      }
+    },
+    {
+      "key": "product",
+      "name": "Product",
+      "role": "trends → designs",
+      "status": "running",
+      "now": "Reading r/sanfrancisco and HN for tonight's two designs",
+      "running_since": "2026-11-08T03:28:00.000Z",
+      "last_run_at": "2026-11-08T03:28:00.000Z",
+      "next_run_at": "2026-11-08T09:29:00.000Z",
+      "schedule": "10:00 · 16:00",
+      "last_shipped": {
+        "at": "2026-11-08T03:15:00.000Z",
+        "text": "Designed git blame --ai (ghost over a terminal line)",
+        "url": "https://hallucinated-store.vercel.app/p/git-blame-ai-tee",
+        "thumb": "https://hallucinated-store.vercel.app/api/mockup?side=flat&print=https%3A%2F%2Fx2ww2cgnt2vbaqob.public.blob.vercel-storage.com%2Fmedia%2Fagents%2Fgit-blame-ai-tee-print-iN5JFvHyP28azNkUQWuS7npTqpo9pj.png"
+      },
+      "today": {
+        "runs": 2,
+        "shipped": 3
+      }
+    },
+    {
+      "key": "creative",
+      "name": "Creative",
+      "role": "ads of the clothes being worn",
+      "status": "idle",
+      "now": null,
+      "last_run_at": "2026-11-08T02:43:00.000Z",
+      "next_run_at": "2026-11-08T04:12:00.000Z",
+      "schedule": "11:30 · 15:30 · 19:30",
+      "last_shipped": {
+        "at": "2026-11-08T02:45:00.000Z",
+        "text": "Tabloid: $700B wiped in 2.5 hours, but wait, there's more",
+        "url": "https://hallucinated-store.vercel.app/campaigns",
+        "thumb": null
+      },
+      "today": {
+        "runs": 3,
+        "shipped": 4
+      }
+    },
+    {
+      "key": "reviewer",
+      "name": "Reviewer",
+      "role": "checks every ad before it ships",
+      "status": "idle",
+      "now": null,
+      "last_run_at": "2026-11-08T02:47:00.000Z",
+      "next_run_at": null,
+      "schedule": "on each ad",
+      "last_shipped": {
+        "at": "2026-11-08T02:47:00.000Z",
+        "text": "Passed 2 of 3 ads; sent one back for a garbled shirt print",
+        "url": null,
+        "thumb": null
+      },
+      "today": {
+        "runs": 3,
+        "shipped": 2
+      }
+    },
+    {
+      "key": "growth",
+      "name": "Growth",
+      "role": "posts on X",
+      "status": "idle",
+      "now": null,
+      "last_run_at": "2026-11-08T03:29:00.000Z",
+      "next_run_at": "2026-11-08T03:59:00.000Z",
+      "schedule": "every 1.5 h, 08:20–23:50",
+      "last_shipped": {
+        "at": "2026-11-08T03:29:00.000Z",
+        "text": "Posted the npm install debt tee with the store link",
+        "url": "https://x.com/hallucinateddpt",
+        "thumb": null
+      },
+      "today": {
+        "runs": 9,
+        "shipped": 11
+      }
+    },
+    {
+      "key": "ops",
+      "name": "Ops",
+      "role": "print orders, courier",
+      "status": "waiting_human",
+      "now": "Courier booking ready ($17.67, 7:30–8:00 pm): waiting on the founder",
+      "running_since": "2026-11-08T03:25:00.000Z",
+      "last_run_at": "2026-11-08T03:25:00.000Z",
+      "next_run_at": "2026-11-08T04:05:00.000Z",
+      "schedule": "hourly :40",
+      "last_shipped": {
+        "at": "2026-11-07T20:41:00.000Z",
+        "text": "Placed Customania order CF5A93CRK: 4 black tees, front + back",
+        "url": null,
+        "thumb": "https://x2ww2cgnt2vbaqob.public.blob.vercel-storage.com/media/v2/tee-back.jpg"
+      },
+      "today": {
+        "runs": 6,
+        "shipped": 2
+      }
+    },
+    {
+      "key": "support",
+      "name": "Support",
+      "role": "inbox, pickups",
+      "status": "paused",
+      "now": null,
+      "last_run_at": "2026-11-08T01:56:00.000Z",
+      "next_run_at": null,
+      "schedule": "every 15 min (paused)",
+      "last_shipped": {
+        "at": "2026-11-08T01:56:00.000Z",
+        "text": "Answered a sizing question (L vs XL)",
+        "url": null,
+        "thumb": null
+      },
+      "today": {
+        "runs": 1,
+        "shipped": 1
+      }
+    }
+  ],
+  "flows": [
+    {
+      "from": "product",
+      "to": "ceo",
+      "label": "proposals",
+      "count_today": 3,
+      "last_at": "2026-11-08T03:16:00.000Z"
+    },
+    {
+      "from": "ceo",
+      "to": "store",
+      "label": "published",
+      "count_today": 2,
+      "last_at": "2026-11-08T03:17:00.000Z"
+    },
+    {
+      "from": "creative",
+      "to": "reviewer",
+      "label": "ads to check",
+      "count_today": 3,
+      "last_at": "2026-11-08T02:46:00.000Z"
+    },
+    {
+      "from": "reviewer",
+      "to": "growth",
+      "label": "approved ads",
+      "count_today": 2,
+      "last_at": "2026-11-08T02:47:00.000Z"
+    },
+    {
+      "from": "growth",
+      "to": "x",
+      "label": "posts",
+      "count_today": 11,
+      "last_at": "2026-11-08T03:29:00.000Z"
+    },
+    {
+      "from": "store",
+      "to": "ops",
+      "label": "paid orders",
+      "count_today": 6,
+      "last_at": "2026-11-08T03:27:00.000Z"
+    },
+    {
+      "from": "ops",
+      "to": "customania",
+      "label": "print orders",
+      "count_today": 1,
+      "last_at": "2026-11-07T20:41:00.000Z"
+    },
+    {
+      "from": "ops",
+      "to": "courier",
+      "label": "pickup",
+      "count_today": 1,
+      "last_at": "2026-11-08T03:25:00.000Z"
+    },
+    {
+      "from": "support",
+      "to": "ops",
+      "label": "pickup notices",
+      "count_today": 1,
+      "last_at": "2026-11-08T01:56:00.000Z"
+    },
+    {
+      "from": "ceo",
+      "to": "product",
+      "label": "today's plan",
+      "count_today": 1,
+      "last_at": "2026-11-07T18:31:00.000Z"
+    }
+  ],
+  "feed": [
+    {
+      "at": "2026-11-08T03:30:00.000Z",
+      "agent": "product",
+      "text": "Pulled 40 posts from r/sanfrancisco and HN; 3 candidate jokes"
+    },
+    {
+      "at": "2026-11-08T03:29:00.000Z",
+      "agent": "growth",
+      "text": "Posted the npm install debt tee",
+      "url": "https://x.com/hallucinateddpt"
+    },
+    {
+      "at": "2026-11-08T03:27:00.000Z",
+      "agent": "ops",
+      "text": "New paid order: 2 tees (M, L), ships to the US"
+    },
+    {
+      "at": "2026-11-08T03:25:00.000Z",
+      "agent": "ops",
+      "text": "Courier quote $17.67, asked the founder to approve"
+    },
+    {
+      "at": "2026-11-08T03:17:00.000Z",
+      "agent": "ceo",
+      "text": "Approved npm install debt",
+      "url": "https://hallucinated-store.vercel.app/p/npm-install-debt-tee"
+    },
+    {
+      "at": "2026-11-08T03:16:00.000Z",
+      "agent": "product",
+      "text": "Proposed 2 designs to the CEO"
+    },
+    {
+      "at": "2026-11-08T03:09:00.000Z",
+      "agent": "growth",
+      "text": "Replied to someone who tagged us"
+    },
+    {
+      "at": "2026-11-08T02:47:00.000Z",
+      "agent": "reviewer",
+      "text": "Rejected an ad: the shirt text came out garbled"
+    },
+    {
+      "at": "2026-11-08T02:46:00.000Z",
+      "agent": "creative",
+      "text": "Made 3 ads: tabloid, wanted poster, standup"
+    },
+    {
+      "at": "2026-11-08T02:21:00.000Z",
+      "agent": "growth",
+      "text": "Posted the wanted poster ad"
+    },
+    {
+      "at": "2026-11-08T01:56:00.000Z",
+      "agent": "support",
+      "text": "Answered a sizing question"
+    },
+    {
+      "at": "2026-11-08T01:21:00.000Z",
+      "agent": "ceo",
+      "text": "Killed 'Hustle culture robot': six fingers, no joke"
+    },
+    {
+      "at": "2026-11-08T00:31:00.000Z",
+      "agent": "founder",
+      "text": "Founder approved a pre-order charge run"
+    },
+    {
+      "at": "2026-11-07T23:31:00.000Z",
+      "agent": "product",
+      "text": "Designed git blame --ai"
+    },
+    {
+      "at": "2026-11-07T20:41:00.000Z",
+      "agent": "ops",
+      "text": "Customania order CF5A93CRK placed and paid"
     }
   ]
 }

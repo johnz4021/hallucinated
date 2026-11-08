@@ -1,104 +1,101 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
-import type { AgentKey, Hq, HqDesign, HqEvent, HqStages } from "@/lib/hq-types";
+import { useEffect, useMemo, useState } from "react";
+import type { Hq, HqAgent, HqFeedItem, HqFlow } from "@/lib/hq-types";
 
-const POLL_MS = 30_000;
-const AGENTS: { key: AgentKey; name: string; does: string }[] = [
-  { key: "product", name: "Product", does: "reads the trends, designs the shirts" },
-  { key: "ceo", name: "CEO", does: "approves or kills, with reasons" },
-  { key: "ops", name: "Ops", does: "orders prints, books the courier" },
-  { key: "growth", name: "Growth", does: "posts on X" },
-  { key: "support", name: "Support", does: "answers the inbox" },
-];
-const WHO: Record<string, { initial: string; name: string }> = {
-  product: { initial: "P", name: "Product" },
-  ceo: { initial: "C", name: "CEO" },
-  ops: { initial: "O", name: "Ops" },
-  growth: { initial: "G", name: "Growth" },
-  support: { initial: "S", name: "Support" },
-  founder: { initial: "H", name: "Human" },
-};
-const STAGES: { key: keyof HqStages; label: string }[] = [
-  { key: "trend", label: "Trend" },
-  { key: "designed", label: "Designed" },
-  { key: "ceo", label: "CEO" },
-  { key: "live", label: "On the store" },
-  { key: "posted", label: "Posted on X" },
-  { key: "ordered", label: "Ordered" },
-  { key: "customania", label: "Sent to print" },
-  { key: "picked_up", label: "Picked up" },
-];
-const HUMAN_KIND: Record<string, string> = {
-  payment_handoff: "Paid",
-  courier_approval: "Approved a courier",
-  approval: "Approved",
-};
+const POLL_MS = 15_000;
+const PULSE_MS = 5 * 60_000;
 
-const money = (n?: number | null) =>
-  n == null ? "–" : new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: n % 1 ? 2 : 0 }).format(n);
+// The company as a map (percent positions inside the workspace). Agents are cards; outside systems are pills.
+const NODES: Record<string, { x: number; y: number; kind: "agent" | "ext"; label?: string }> = {
+  ceo: { x: 50, y: 11, kind: "agent" },
+  product: { x: 13, y: 45, kind: "agent" },
+  creative: { x: 38, y: 45, kind: "agent" },
+  reviewer: { x: 62, y: 45, kind: "agent" },
+  growth: { x: 87, y: 45, kind: "agent" },
+  ops: { x: 32, y: 80, kind: "agent" },
+  support: { x: 62, y: 80, kind: "agent" },
+  store: { x: 9, y: 80, kind: "ext", label: "Store" },
+  x: { x: 89, y: 80, kind: "ext", label: "X" },
+  customania: { x: 22, y: 97, kind: "ext", label: "Customania" },
+  courier: { x: 44, y: 97, kind: "ext", label: "Courier" },
+};
+const LABEL_T: Record<string, number> = { "ceo-store": 0.3, "store-ceo": 0.7, "ops-customania": 0.72, "ops-courier": 0.72 };
+const AGENT_ORDER = ["ceo", "product", "creative", "reviewer", "growth", "ops", "support"];
+const INITIAL: Record<string, string> = { ceo: "C", product: "P", creative: "Cr", reviewer: "R", growth: "G", ops: "O", support: "S", founder: "H" };
+const STATUS: Record<string, string> = { running: "Running", idle: "Idle", paused: "Paused", waiting_human: "Waiting on a human" };
+
 const ms = (iso?: string | null) => (iso ? Date.parse(iso) : NaN);
+const usd = (n?: number | null, cents = false) =>
+  n == null ? "–" : new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: cents || n % 1 ? 2 : 0 }).format(n);
+const clip = (s: string, n = 80) => (s.length > n ? `${s.slice(0, n - 1).trimEnd()}…` : s);
 
-function ago(iso: string | undefined | null, now: number) {
+function ago(iso: string | null | undefined, now: number) {
   const t = ms(iso);
   if (Number.isNaN(t)) return "";
   const s = Math.max(0, Math.round((now - t) / 1000));
   if (s < 60) return `${s}s ago`;
   const m = Math.round(s / 60);
-  if (m < 60) return `${m} min ago`;
-  const h = Math.round(m / 60);
-  if (h < 24) return `${h} h ago`;
-  const d = Math.round(h / 24);
-  return d === 1 ? "yesterday" : `${d} days ago`;
+  if (m < 60) return `${m}m ago`;
+  const h = Math.floor(m / 60);
+  return h < 24 ? `${h}h ago` : `${Math.round(h / 24)}d ago`;
 }
-const clock = (iso?: string | null) => {
+function until(iso: string | null | undefined, now: number) {
   const t = ms(iso);
-  return Number.isNaN(t)
-    ? ""
-    : new Intl.DateTimeFormat("en-US", { timeZone: "America/Los_Angeles", hour: "numeric", minute: "2-digit" }).format(t);
-};
-const eventKey = (e: HqEvent) => `${e.at ?? ""}|${e.agent ?? ""}|${e.text}`;
+  if (Number.isNaN(t)) return null;
+  const s = Math.round((t - now) / 1000);
+  if (s <= 0) return "due now";
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+  return h ? `${h}h ${m}m` : m ? `${m}m ${String(sec).padStart(2, "0")}s` : `${sec}s`;
+}
 
-function useNow(stepMs = 1000) {
+function useNow() {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
-    const t = setInterval(() => setNow(Date.now()), stepMs);
+    const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
-  }, [stepMs]);
+  }, []);
   return now;
 }
 
-export type HqAd = { id: string; caption: string; image: string | null; kind: "image" | "video"; x_url: string | null };
+// v1 documents (no `money`) still fill the strip from `counters`.
+function moneyOf(hq: Hq) {
+  const m = hq.money ?? {};
+  const c = hq.counters ?? {};
+  return {
+    revenue: m.revenue_usd ?? c.revenue_usd,
+    orders: m.orders_paid ?? c.orders,
+    preUsd: m.preorders_usd,
+    preCount: m.preorders_count,
+    live: m.items_live ?? c.live_items,
+    posts: m.posts_today ?? c.x_posts,
+    spend: m.agent_spend_today_usd ?? c.agent_spend_usd,
+    approvals: c.human_approvals ?? hq.human?.length,
+  };
+}
 
-export default function HqBoard({ initial, initialSource, ads = [] }: { initial: Hq; initialSource: string; ads?: HqAd[] }) {
+export default function HqBoard({ initial, initialSource }: { initial: Hq; initialSource: string }) {
   const [hq, setHq] = useState<Hq>(initial);
   const [source, setSource] = useState(initialSource);
-  const [fetchedAt, setFetchedAt] = useState(() => Date.now());
   const [stale, setStale] = useState(false);
-  const [fresh, setFresh] = useState<Set<string>>(new Set());
-  const seen = useRef<Set<string>>(new Set((initial.timeline ?? []).map(eventKey)));
   const now = useNow();
 
   useEffect(() => {
     let alive = true;
-    async function poll() {
+    const poll = async () => {
       try {
         const res = await fetch("/api/hq", { cache: "no-store" });
         if (!res.ok) throw new Error(String(res.status));
         const next = (await res.json()) as Hq;
         if (!alive) return;
-        const added = (next.timeline ?? []).map(eventKey).filter((k) => !seen.current.has(k));
-        added.forEach((k) => seen.current.add(k));
-        setFresh(new Set(added));
         setHq(next);
         setSource(res.headers.get("x-hq-source") ?? "live");
-        setFetchedAt(Date.now());
         setStale(false);
       } catch {
         if (alive) setStale(true);
       }
-    }
+    };
     const t = setInterval(poll, POLL_MS);
     return () => {
       alive = false;
@@ -106,272 +103,135 @@ export default function HqBoard({ initial, initialSource, ads = [] }: { initial:
     };
   }, []);
 
-  const c = hq.counters ?? {};
-  const designs = useMemo(() => sortDesigns(hq.designs ?? []), [hq.designs]);
-  const rejected = designs.filter((d) => d.stages?.ceo?.decision === "rejected" || d.status === "rejected");
-  const timeline = useMemo(
-    () => [...(hq.timeline ?? [])].sort((a, b) => (ms(b.at) || 0) - (ms(a.at) || 0)).slice(0, 60),
-    [hq.timeline],
-  );
-  const human = [...(hq.human ?? [])].sort((a, b) => (ms(b.at) || 0) - (ms(a.at) || 0));
-  const updated = hq.generated_at ?? null;
+  const money = moneyOf(hq);
+  const agents = useMemo(() => {
+    const byKey = new Map((hq.agents ?? []).map((a) => [a.key, a]));
+    return AGENT_ORDER.map((k) => byKey.get(k) ?? ({ key: k, name: k[0].toUpperCase() + k.slice(1), status: undefined } as HqAgent));
+  }, [hq.agents]);
+  const flows = (hq.flows ?? []).filter((f) => NODES[f.from] && NODES[f.to]);
+  const feed: HqFeedItem[] = useMemo(() => {
+    const items = hq.feed?.length ? hq.feed : (hq.timeline ?? []).map((e) => ({ at: e.at, agent: e.agent, text: e.text, url: e.url }));
+    return [...items].sort((a, b) => (ms(b.at) || 0) - (ms(a.at) || 0)).slice(0, 15);
+  }, [hq.feed, hq.timeline]);
   const pt = new Intl.DateTimeFormat("en-US", { timeZone: "America/Los_Angeles", hour: "numeric", minute: "2-digit", second: "2-digit" }).format(now);
 
   return (
-    <div className="hq">
-      <header className="hq-top">
-        <div className="hq-title">
-          <Link href="/" className="hq-mark" aria-label="Hallucinated store">
-            <img src="/wordmark-forest.svg" alt="Hallucinated" width={220} height={36} />
-          </Link>
-          <div>
-            <h1>Hallucinated HQ</h1>
-            <p>A clothing company run by AI agents. This page is what they did today, as they do it.</p>
-          </div>
-        </div>
-        <div className="hq-status" aria-live="off">
-          <span className="hq-clock">{pt} <small>PT</small></span>
-          <span className={`hq-updated${stale ? " is-stale" : ""}`}>
-            <span className="hq-pulse" aria-hidden="true" />
-            {updated ? `Last update ${ago(updated, now)}` : `Checked ${ago(new Date(fetchedAt).toISOString(), now)}`}
-            {stale && ", reconnecting"}
-          </span>
-          {source === "fixture" && <span className="hq-sample">Sample data (preview only)</span>}
-          <Link href="/" className="hq-back">Visit the store</Link>
-        </div>
+    <div className="hq2">
+      <header className="hq2-top">
+        <Link href="/" className="hq2-mark" aria-label="Hallucinated store">
+          <img src="/wordmark-forest.svg" alt="Hallucinated" width={180} height={30} />
+        </Link>
+        <h1>HQ</h1>
+        <span className={`hq2-live${stale ? " is-stale" : ""}`}>
+          <span className="hq2-dot" aria-hidden="true" />
+          {stale ? "reconnecting" : "live"}
+          <span className="hq2-ago">updated {ago(hq.generated_at, now) || "just now"}</span>
+        </span>
+        {source === "fixture" && <span className="hq2-sample">sample data</span>}
+        <span className="hq2-clock">{pt} <small>PT</small></span>
       </header>
 
-      <section className="hq-counters" aria-label="Today in numbers">
-        <Counter n={c.designs_proposed} label="designs proposed" />
-        <Counter n={c.designs_approved} label="approved by the CEO" />
-        <Counter n={c.designs_rejected} label="killed by the CEO" tone="rust" />
-        <Counter n={c.live_items} label="items on the store" />
-        <Counter n={c.x_posts} label="posts on X" />
-        <Counter n={c.orders} label="orders" />
-        <Counter value={money(c.revenue_usd)} label="revenue" />
-        <Counter value={money(c.agent_spend_usd)} label="agent spend" />
-        <Counter n={c.human_approvals} label="times a human stepped in" tone="sand" />
+      <section className="hq2-money" aria-label="Money">
+        <Stat value={usd(money.revenue)} label="revenue" />
+        <Stat value={money.orders ?? "–"} label="paid orders" />
+        <Stat value={usd(money.preUsd)} label={`pre-orders${money.preCount != null ? ` (${money.preCount})` : ""}`} />
+        <Stat value={money.live ?? "–"} label="items live" />
+        <Stat value={money.posts ?? "–"} label="posts today" />
+        <Stat value={usd(money.spend, true)} label="agent spend today" />
+        <span className="hq2-chip">human approvals today: {money.approvals ?? 0}</span>
       </section>
 
-      <div className="hq-main">
-        <section className="hq-pipeline" aria-labelledby="pipe-title">
-          <h2 id="pipe-title">Every design, start to finish</h2>
-          <p className="hq-note">Trend, design, the CEO&rsquo;s call, the store, X, orders, the print shop, the courier. Grey means not yet.</p>
-          {designs.length ? (
-            <ol className="hq-designs">
-              {designs.map((d) => <DesignRow key={d.design_id} d={d} now={now} />)}
-            </ol>
-          ) : (
-            <p className="hq-empty">No designs yet today. Product runs at 10:00 and 16:00.</p>
-          )}
+      <div className="hq2-main">
+        <section className="hq2-map" aria-label="Agents and how work moves between them">
+          <svg className="hq2-edges" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+            {flows.map((f) => {
+              const a = NODES[f.from], b = NODES[f.to];
+              const hot = now - ms(f.last_at) < PULSE_MS;
+              return <line key={`${f.from}-${f.to}`} x1={a.x} y1={a.y} x2={b.x} y2={b.y} className={hot ? "is-hot" : ""} />;
+            })}
+          </svg>
+          {flows.map((f) => {
+            const a = NODES[f.from], b = NODES[f.to];
+            const hot = now - ms(f.last_at) < PULSE_MS;
+            // Two-way pairs: each label sits nearer its own sender. Long diagonals keep clear of the middle row.
+            const twoWay = flows.some((g) => g.from === f.to && g.to === f.from);
+            const t = twoWay ? 0.3 : LABEL_T[`${f.from}-${f.to}`] ?? 0.5;
+            return (
+              <span key={`l-${f.from}-${f.to}`} className={`hq2-edge-label${hot ? " is-hot" : ""}`} style={{ left: `${a.x + (b.x - a.x) * t}%`, top: `${a.y + (b.y - a.y) * t}%` }}>
+                {f.label ?? `${f.from} → ${f.to}`} <b>{f.count_today ?? 0}</b>
+              </span>
+            );
+          })}
+          {Object.entries(NODES).filter(([, n]) => n.kind === "ext").map(([k, n]) => (
+            <span key={k} className="hq2-ext" style={{ left: `${n.x}%`, top: `${n.y}%` }}>{n.label}</span>
+          ))}
+          {agents.map((a) => <AgentNode key={a.key} a={a} now={now} />)}
         </section>
 
-        <aside className="hq-feed" aria-labelledby="feed-title">
-          <h2 id="feed-title">Live</h2>
-          {timeline.length ? (
-            <ol className="hq-timeline">
-              {timeline.map((e) => {
-                const who = WHO[e.agent ?? ""] ?? { initial: "?", name: e.agent ?? "Agent" };
-                return (
-                  <li key={eventKey(e)} className={`hq-event agent-${e.agent ?? "x"}${fresh.has(eventKey(e)) ? " is-new" : ""}`}>
-                    <span className="hq-avatar" title={who.name} aria-label={who.name}>{who.initial}</span>
-                    <span className="hq-event-text">
-                      {e.url ? <a href={e.url}>{e.text}</a> : e.text}
-                    </span>
-                    <time className="hq-event-time" dateTime={e.at}>{ago(e.at, now)}</time>
-                  </li>
-                );
-              })}
+        <aside className="hq2-feed" aria-label="Latest">
+          <h2>Latest</h2>
+          {feed.length ? (
+            <ol>
+              {feed.map((e, i) => (
+                <li key={`${e.at}-${i}`} className={`agent-${e.agent ?? "x"}`}>
+                  <span className="hq2-av" aria-label={e.agent}>{INITIAL[e.agent ?? ""] ?? "?"}</span>
+                  <span className="hq2-feed-text">{e.url ? <a href={e.url}>{e.text}</a> : e.text}</span>
+                  <time dateTime={e.at}>{ago(e.at, now)}</time>
+                </li>
+              ))}
             </ol>
           ) : (
-            <p className="hq-empty">Quiet so far. Events show up here within a minute.</p>
+            <p className="hq2-empty">Nothing yet today.</p>
           )}
         </aside>
       </div>
+    </div>
+  );
+}
 
-      {rejected.length > 0 && (
-        <section className="hq-rejects" aria-labelledby="rej-title">
-          <h2 id="rej-title">Killed by the CEO</h2>
-          <p className="hq-note">Not every idea ships. The CEO agent writes down why.</p>
-          <ul>
-            {rejected.map((d) => (
-              <li key={d.design_id}>
-                <blockquote>&ldquo;{d.stages?.ceo?.reason ?? "No reason given."}&rdquo;</blockquote>
-                <p className="hq-reject-meta">
-                  On <strong>{d.title ?? d.design_id}</strong>
-                  {d.stages?.ceo?.at ? `, ${clock(d.stages.ceo.at)}` : ""}
-                </p>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
+function Stat({ value, label }: { value: React.ReactNode; label: string }) {
+  return (
+    <div className="hq2-stat">
+      <span className="hq2-num">{value}</span>
+      <span className="hq2-label">{label}</span>
+    </div>
+  );
+}
 
-      {ads.length > 0 && (
-        <section className="hq-ads" aria-labelledby="ads-title">
-          <div className="hq-ads-head">
-            <h2 id="ads-title">Ads the agents made</h2>
-            <Link href="/campaigns">See all the ads</Link>
-          </div>
-          <ul>
-            {ads.map((a) => (
-              <li key={a.id}>
-                <a href={a.x_url ?? "/campaigns"} className="hq-ad">
-                  <span className="hq-ad-img">
-                    {a.image ? <img src={a.image} alt="" loading="lazy" /> : <span>Video</span>}
-                  </span>
-                  <span className="hq-ad-caption">{a.caption}</span>
-                </a>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
-
-      <section className="hq-agents" aria-labelledby="agents-title">
-        <h2 id="agents-title">Shipped by agent</h2>
-        <div className="hq-agent-cols">
-          {AGENTS.map((a) => {
-            const items = [...(hq.by_agent?.[a.key] ?? [])].sort((x, y) => (ms(y.at) || 0) - (ms(x.at) || 0));
-            return (
-              <div key={a.key} className={`hq-agent agent-${a.key}`}>
-                <h3><span className="hq-avatar" aria-hidden="true">{WHO[a.key].initial}</span>{a.name}</h3>
-                <p className="hq-agent-does">{a.does}</p>
-                {items.length ? (
-                  <ul>
-                    {items.slice(0, 8).map((it, i) => (
-                      <li key={`${it.at}-${i}`}>
-                        <time dateTime={it.at}>{clock(it.at)}</time>
-                        <span>{it.url ? <a href={it.url}>{it.text}</a> : it.text}</span>
-                      </li>
-                    ))}
-                    {items.length > 8 && <li className="hq-more">and {items.length - 8} more</li>}
-                  </ul>
-                ) : (
-                  <p className="hq-empty">Nothing yet.</p>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      </section>
-
-      <section className="hq-human" aria-labelledby="human-title">
-        <h2 id="human-title">Where a human stepped in</h2>
-        <p className="hq-note">The agents do the work. A person still holds the card, approves the spend and clicks the occasional checkbox.</p>
-        {human.length ? (
-          <ol>
-            {human.map((h, i) => (
-              <li key={`${h.at}-${i}`}>
-                <time dateTime={h.at}>{clock(h.at)}</time>
-                <span className="hq-human-kind">{HUMAN_KIND[h.kind ?? ""] ?? "Stepped in"}</span>
-                <span className="hq-human-text">{h.text}</span>
-                {h.amount_usd != null && <span className="hq-human-amt">{money(h.amount_usd)}</span>}
-              </li>
-            ))}
-          </ol>
-        ) : (
-          <p className="hq-empty">Nobody has had to step in yet. Give it time.</p>
-        )}
-      </section>
-
-      <footer className="hq-foot">
-        <p>
-          Built from the agents&rsquo; own logs and refreshed every 30 seconds. Personal details are scrubbed before anything reaches this page.{" "}
-          <Link href="/shop">Shop what they made</Link>
+function AgentNode({ a, now }: { a: HqAgent; now: number }) {
+  const n = NODES[a.key];
+  if (!n) return null;
+  const next = until(a.next_run_at, now);
+  const ls = a.last_shipped;
+  const shipped = ls?.text ? (
+    <>
+      {ls.thumb && <img src={ls.thumb} alt="" loading="lazy" />}
+      <span>{clip(ls.text)}</span>
+    </>
+  ) : null;
+  return (
+    <article className={`hq2-node status-${a.status ?? "unknown"} agent-${a.key}`} style={{ left: `${n.x}%`, top: `${n.y}%` }}>
+      <header>
+        <span className="hq2-av" aria-hidden="true">{INITIAL[a.key] ?? "?"}</span>
+        <h3>{a.name ?? a.key}</h3>
+        <span className="hq2-status">{STATUS[a.status ?? ""] ?? "No data"}</span>
+      </header>
+      {a.now && (a.status === "running" || a.status === "waiting_human") && <p className="hq2-now">{clip(a.now, 90)}</p>}
+      <p className="hq2-next">
+        {a.status === "running" && a.running_since
+          ? `running for ${ago(a.running_since, now).replace(" ago", "")}`
+          : a.status === "paused"
+            ? "paused"
+            : next
+              ? `next run in ${next}`
+              : a.schedule ?? "on demand"}
+      </p>
+      {shipped && (
+        <p className="hq2-shipped">
+          {ls?.url ? <a href={ls.url}>{shipped}</a> : <span>{shipped}</span>}
+          <time dateTime={ls?.at}>{ago(ls?.at, now)}</time>
         </p>
-      </footer>
-    </div>
-  );
-}
-
-function Counter({ n, value, label, tone }: { n?: number; value?: string; label: string; tone?: "rust" | "sand" }) {
-  return (
-    <div className={`hq-counter${tone ? ` tone-${tone}` : ""}`}>
-      <span className="hq-num">{value ?? (n == null ? "–" : n.toLocaleString("en-US"))}</span>
-      <span className="hq-label">{label}</span>
-    </div>
-  );
-}
-
-function lastAt(d: HqDesign) {
-  const s = d.stages ?? {};
-  return Math.max(0, ...Object.values(s).map((x) => ms((x as { at?: string } | null)?.at) || 0));
-}
-function sortDesigns(ds: HqDesign[]) {
-  return [...ds].sort((a, b) => lastAt(b) - lastAt(a));
-}
-
-function StageDetail({ k, d }: { k: keyof HqStages; d: HqStages }) {
-  switch (k) {
-    case "trend":
-      return d.trend?.sources?.[0] ? <a href={d.trend.sources[0].url} rel="nofollow noopener noreferrer">{d.trend.sources[0].label}</a> : null;
-    case "designed":
-      return null;
-    case "ceo":
-      return d.ceo?.decision ? <span>{d.ceo.decision === "approved" ? "Approved" : "Rejected"}</span> : null;
-    case "live":
-      return d.live?.url ? <a href={d.live.url}>View</a> : null;
-    case "posted":
-      return d.posted?.url ? <a href={d.posted.url}>See post</a> : null;
-    case "ordered": {
-      const o = d.ordered;
-      if (!o) return null;
-      const sizes = o.sizes ? Object.entries(o.sizes).map(([s, q]) => `${s}${q > 1 ? `×${q}` : ""}`).join(" ") : "";
-      return <span>{[o.count != null ? `${o.count} sold` : "", sizes, o.amount_usd != null ? money(o.amount_usd) : ""].filter(Boolean).join(", ")}</span>;
-    }
-    case "customania": {
-      const o = d.customania;
-      return o ? <span>{[o.order_ref, o.amount_usd != null ? money(o.amount_usd) : ""].filter(Boolean).join(", ")}</span> : null;
-    }
-    case "picked_up": {
-      const p = d.picked_up;
-      if (!p) return null;
-      return <span>{p.status === "booked" ? "Courier booked" : p.status === "delivered" ? "Delivered" : "Picked up"}</span>;
-    }
-  }
-}
-
-function DesignRow({ d, now }: { d: HqDesign; now: number }) {
-  const s = d.stages ?? {};
-  const rejected = s.ceo?.decision === "rejected" || d.status === "rejected";
-  const statusLabel = rejected ? "Rejected" : d.status === "shipped" ? "Shipped" : d.status === "live" ? "On the store" : "Waiting on the CEO";
-  return (
-    <li className={`hq-design${rejected ? " is-rejected" : ""}`}>
-      <div className="hq-art">
-        {d.artwork_url ? <img src={d.artwork_url} alt={`Artwork for ${d.title ?? d.design_id}`} loading="lazy" /> : <span>no artwork yet</span>}
-      </div>
-      <div className="hq-design-body">
-        <div className="hq-design-head">
-          <h3>{d.slug && !rejected ? <Link href={`/p/${d.slug}`}>{d.title ?? d.design_id}</Link> : d.title ?? d.design_id}</h3>
-          <span className={`hq-chip status-${rejected ? "rejected" : d.status ?? "proposed"}`}>{statusLabel}</span>
-          <span className="hq-id">{d.design_id}</span>
-        </div>
-        {s.trend?.summary && <p className="hq-trend">{s.trend.summary}</p>}
-        {s.ceo?.reason && (
-          <p className={`hq-ceo${rejected ? " is-rejected" : ""}`}>
-            <span className="hq-avatar" aria-hidden="true">C</span>
-            <span>&ldquo;{s.ceo.reason}&rdquo;</span>
-          </p>
-        )}
-        <ol className="hq-rail" aria-label="Stages">
-          {STAGES.map((st) => {
-            const v = s[st.key] as { at?: string } | null | undefined;
-            const blocked = rejected && STAGES.findIndex((x) => x.key === st.key) > 2;
-            const state = blocked ? "blocked" : st.key === "ceo" && rejected ? "rejected" : v ? "done" : "todo";
-            return (
-              <li key={st.key} className={`hq-stage is-${state}`}>
-                <span className="hq-dot" aria-hidden="true" />
-                <span className="hq-stage-label">{st.label}</span>
-                <span className="hq-stage-when">{v?.at ? clock(v.at) : blocked ? "" : "not yet"}</span>
-                <span className="hq-stage-detail"><StageDetail k={st.key} d={s} /></span>
-              </li>
-            );
-          })}
-        </ol>
-        {s.picked_up?.note && <p className="hq-trend">{s.picked_up.note}</p>}
-        <span className="sr-only">Last activity {ago(new Date(lastAt(d) || now).toISOString(), now)}</span>
-      </div>
-    </li>
+      )}
+    </article>
   );
 }

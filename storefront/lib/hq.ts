@@ -32,8 +32,9 @@ export function piiProblem(raw: string): string | null {
 export function shapeProblem(doc: unknown): string | null {
   const d = doc as Hq;
   if (!d || typeof d !== "object" || Array.isArray(d)) return "body must be a JSON object";
-  if (d.version !== 1) return "version must be 1";
-  for (const k of ["designs", "timeline", "human"] as const) if (d[k] !== undefined && !Array.isArray(d[k])) return `${k} must be an array`;
+  if (d.version !== 1 && d.version !== 2) return "version must be 1 or 2";
+  for (const k of ["designs", "timeline", "human", "agents", "flows", "feed"] as const) if (d[k] !== undefined && !Array.isArray(d[k])) return `${k} must be an array`;
+  if (d.money !== undefined && (typeof d.money !== "object" || Array.isArray(d.money))) return "money must be an object";
   if (d.counters !== undefined && (typeof d.counters !== "object" || Array.isArray(d.counters))) return "counters must be an object";
   if (d.by_agent !== undefined && (typeof d.by_agent !== "object" || Array.isArray(d.by_agent))) return "by_agent must be an object";
   return null;
@@ -96,7 +97,7 @@ function shiftedFixture(): Hq {
   const walk = (v: unknown): unknown => {
     if (Array.isArray(v)) return v.map(walk);
     if (v && typeof v === "object") {
-      return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, (k === "at" || k === "generated_at") && typeof x === "string" ? new Date(Date.parse(x) + offset).toISOString() : walk(x)]));
+      return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, (k === "at" || k.endsWith("_at") || k === "running_since") && typeof x === "string" && !Number.isNaN(Date.parse(x)) ? new Date(Date.parse(x) + offset).toISOString() : walk(x)]));
     }
     return v;
   };
