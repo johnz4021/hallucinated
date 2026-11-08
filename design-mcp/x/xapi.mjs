@@ -155,3 +155,12 @@ export function engagedWithUs(t, me) {
   if ((t.mentions || []).some((m) => m.id === me.id || String(m.username).toLowerCase() === String(me.username).toLowerCase())) return true;
   return (t.referenced || []).some((r) => (r.type === "quoted" || r.type === "replied_to") && r.author_id === me.id);
 }
+
+// Our own recent posts with their public metrics (for the CEO's x_stats). Read-only.
+export async function xUserTweets(keys, userId, max = 30) {
+  const qs = new URLSearchParams({ max_results: String(Math.min(Math.max(max, 5), 100)), "tweet.fields": "public_metrics,created_at,organic_metrics", exclude: "retweets" });
+  let r;
+  try { r = await call(keys, "GET", `/2/users/${userId}/tweets?${qs}`); }
+  catch (e) { if (e.status !== 403 && e.status !== 400) throw e; qs.set("tweet.fields", "public_metrics,created_at"); r = await call(keys, "GET", `/2/users/${userId}/tweets?${qs}`); }
+  return (r.data || []).map((t) => ({ id: t.id, url: `https://x.com/i/status/${t.id}`, created_at: t.created_at, text: t.text, ...t.public_metrics, ...(t.organic_metrics ? { impressions: t.organic_metrics.impression_count } : {}) }));
+}

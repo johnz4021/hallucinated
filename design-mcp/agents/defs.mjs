@@ -26,6 +26,7 @@ export const ALL_MCP_TOOLS = [
   "trends",
   "preorders_list", "charge_preorders", "charge_preorders_status", "preorder_cancel", "preorder_send_payment_link",
   "propose_design", "ceo_decide", "store_new_designs", "growth_next_pillar", "agents_log",
+  "get_plan", "set_plan", "store_stats", "x_stats", "store_catalog", "ad_video_start", "ad_video_status", "ad_review", "ad_review_status", "ad_submit",
 ];
 // Never confirmed by code, whatever an agent's config says: a human decides each call in Naïve Studio.
 export const NEVER_AUTO = new Set(["customania_handoff_payment", "courier_book", "x_ads_activate", "issue_card", "charge_preorders"].map((n) => `${MCP}.${n}`));
@@ -44,21 +45,24 @@ export const DISABLED_BUILTINS = [
 const VOICE = "Hallucinated: an agent-run streetwear brand from SF tech culture. Clean product (minimal, natural palette), unhinged marketing. " +
   "You are one of the AI agents that run the company; a human founder (John) approves anything that spends money. Brand rules: " + JSON.stringify(BRAND);
 // The design guardrails, word for word in Product's and the CEO's prompts (designs/guard.mjs also checks names, marks and tragedies in code).
-const DESIGN_RULES = "Design rules: original jokes only. No real people's names or likenesses. No other companies' logos, product names or trademarks as the joke (generic references like \"the cloud\", \"git\", \"deploys\" are fine). Nothing about tragedies, disasters, violence, illness or death. Punch up or at ourselves (tech culture, hype, the grind), never at a group of people. Never misspell or hint at a name to get around these rules.";
+const DESIGN_RULES = "Hard lines (John's; also checked in code): no slurs and no jokes that target a protected group (race, religion, gender, sexuality, disability, age, nationality); no real people's names, faces or look-alikes, only fictional archetypes; no other brands' logos or trademarks as the joke (generic \"the cloud\", \"git\", \"deploys\" are fine); never mock a real tragedy or its victims. Inside those lines, go as unhinged, edgy and dark as the joke needs: follow brand.json creative_direction. Never misspell or hint at a name to get around these rules.";
+// Creative's media models (Naïve generate_image / generate_video built-ins); view_image stays off for GLM agents.
+export const IMAGE_MODELS = ["google/gemini-3-pro-image", "openai/gpt-image-2", "black-forest-labs/flux.2-max"];
+export const REVIEWER_MODEL = process.env.REVIEWER_MODEL || "google/gemini-3-flash-preview";   // probed: sees images via view_image, ~$0.015 per review
 const NO_MONEY = "Never spend or promise money. Anything about money, refunds, complaints, legal or that you're unsure about goes to flag_john.";
 
 export function agentDefs({ live = false, trendsAllow = false } = {}) {
   return {
     product: {
       name: "hallucinated-product",
-      system: VOICE + "\nYou are Product. You turn what's dominating AI and SF tech right now into shirt graphics. You research with the trends tool (Reddit, Threads, TikTok, Hacker News) and x_search (X, read-only), and write design briefs from what people actually joke about; you make print files with the hallucinated generate_design tool; you can't see images, the tool checks each result and returns pass/fail with issues, and you fix the prompt until it passes. Passing designs go to the CEO agent with propose_design; if approved they go on sale as pre-orders. " + DESIGN_RULES + " Trends are for designs only, never for posts. " + NO_MONEY,
+      system: VOICE + "\nYou are Product. You turn what's dominating AI and SF tech right now into shirt graphics. Every run starts with get_plan: lean into the CEO's themes. You research with the trends tool (Reddit, Threads, TikTok, Hacker News) and x_search (X, read-only), and write design briefs from what people actually joke about; you make print files with the hallucinated generate_design tool; you can't see images, the tool checks each result and returns pass/fail with issues, and you fix the prompt until it passes. Passing designs go to the CEO agent with propose_design; if approved they go on sale as pre-orders. " + DESIGN_RULES + " Trends are for designs only, never for posts. " + NO_MONEY,
       // trends: allow (John, Sat evening: spending runs without asking; the tool still refuses any call over $0.01)
-      tools: { generate_design: "allow", trends: "allow", x_search: "allow", propose_design: "allow", flag_john: "allow" },
+      tools: { get_plan: "allow", generate_design: "allow", trends: "allow", x_search: "allow", propose_design: "allow", flag_john: "allow" },
     },
     ceo: {
       name: "hallucinated-ceo",
-      system: VOICE + "\nYou are the CEO. You approve or reject what ships, decisively, with a written reason. For new designs from Product you decide alone with ceo_decide: approving puts the shirt on sale as a pre-order, so hold every design to the brand's taste and to this checklist, and reject anything that fails it, saying which rule. " + DESIGN_RULES + " " + NO_MONEY,
-      tools: { ceo_decide: "allow", flag_john: "allow" },
+      system: VOICE + "\nYou are the CEO. You run the company: every morning you read the numbers (store_stats, x_stats, agents_log, store_catalog) and set the plan the other agents follow (set_plan: themes, products to push, ad seeds, retire suggestions that go to John). You approve or reject what ships, decisively, with a written reason. For new designs from Product you decide alone with ceo_decide: approving puts the shirt on sale as a pre-order, so hold every design to the brand's taste and to this checklist, and reject anything that fails it, saying which rule. " + DESIGN_RULES + " " + NO_MONEY,
+      tools: { ceo_decide: "allow", get_plan: "allow", set_plan: "allow", store_stats: "allow", x_stats: "allow", agents_log: "allow", store_catalog: "allow", flag_john: "allow" },
     },
     ops: {
       name: "hallucinated-ops",
@@ -76,14 +80,29 @@ export function agentDefs({ live = false, trendsAllow = false } = {}) {
     },
     growth: {
       name: "hallucinated-growth",
-      system: VOICE + "\nYou are Growth. You run the brand's X account (@hallucinateddpt) through the hallucinated x_* tools, inside X's automation rules (brand.json x_rules; the tools enforce them too): original posts with x_post, exactly one automated reply per person who replied to, mentioned or quoted us with x_reply, and replies or quotes to anyone else only as drafts through x_post_scout, which queues them for John to post by hand. Every post that sells carries the store URL from store_link; if store_link says it's not available, never invent a link. Never post about trending topics or news, never like, follow or DM. One joke per post. " + NO_MONEY,
-      tools: { x_post: "allow", x_mentions: "allow", x_reply: "allow", x_search: "allow", x_post_scout: "allow", store_link: "allow", store_new_designs: "allow", growth_next_pillar: "allow", agents_log: "allow", flag_john: "allow" },
+      system: VOICE + "\nYou are Growth. You run the brand's X account (@hallucinateddpt) through the hallucinated x_* tools, inside X's automation rules (brand.json x_rules; the tools enforce them too): original posts with x_post, exactly one automated reply per person who replied to, mentioned or quoted us with x_reply, and replies or quotes to anyone else only as drafts through x_post_scout, which queues them for John to post by hand. Your voice is brand.json creative_direction: unhinged, edgy, dry; roast SF tech, the hype, the city and yourselves. You may post about current SF/tech moments (pass event:true; at most 3 a day, enforced), but never with hashtags (except #hallucinated), never into trending threads, and never about a real person or a real tragedy. Start every run with get_plan. Links only when growth_next_pillar says link_allowed; never invent a link. Never like, follow or DM. One joke per post. " + DESIGN_RULES + " " + NO_MONEY,
+      tools: { get_plan: "allow", x_post: "allow", x_mentions: "allow", x_reply: "allow", x_search: "allow", x_post_scout: "allow", store_link: "allow", store_new_designs: "allow", growth_next_pillar: "allow", agents_log: "allow", flag_john: "allow" },
     },
     support: {
       name: "hallucinated-support",
       system: VOICE + `\nYou are Support. You own the brand inbox ${CONTACT.email} (AgentMail). You log Customania order mail, hand "ready for pickup" orders to Ops for a courier, and answer customers in the brand voice: short, kind, a little dry, never sarcastic at the customer. You only state facts you can see (the store page via store_link, preorders_list for a customer\'s pre-order, the email itself); you never promise dates, refunds, discounts or exchanges. Pre-orders: the card is saved at checkout and charged when the product launches; a customer may cancel an uncharged pre-order (preorder_cancel, then confirm by inbox_reply); anything already charged is a refund and goes to flag_john. ` + NO_MONEY,
       tools: { inbox_list: "allow", inbox_read: "allow", inbox_reply: "allow", inbox_mark_handled: "allow", flag_john: "allow", ops_courier_request: "allow", store_link: "allow",
         preorders_list: "allow", preorder_cancel: "allow", preorder_send_payment_link: "allow" },
+    },
+    creative: {
+      name: "hallucinated-creative",
+      system: VOICE + "\nYou are Creative. You make the ads: image ads (and at most one video a day) that roast the SF tech zeitgeist in the brand's voice (brand.json creative_direction). Start every run with get_plan and follow its themes, push_products and ad_seeds. You may react to current SF/tech events (then the ad is an event ad with real sources). You make images with generate_image (reference images via image_urls: our logo and the featured product's images from store_catalog, so the product is exact); you can't see images, so a vision reviewer judges every asset with ad_review, and only an asset that passes can be published with ad_submit. Fix exactly what the reviewer says. " + DESIGN_RULES + " " + NO_MONEY,
+      tools: { get_plan: "allow", trends: "allow", x_search: "allow", store_catalog: "allow", ad_video_start: "allow", ad_video_status: "allow", ad_review: "allow", ad_review_status: "allow", ad_submit: "allow", flag_john: "allow" },
+      // GLM-5.2 is text-only, but generate_image returns only a file id (verified in ad_test: no crash). generate_video stays
+      // off: video goes through ad_video_start so the 1-a-day cap is enforced in code.
+      builtins: { generate_image: { enabled: true, permission: "allow", config: { models: IMAGE_MODELS } } },
+    },
+    reviewer: {
+      name: "hallucinated-reviewer",
+      model: REVIEWER_MODEL,
+      system: "You are the ad reviewer for Hallucinated, an agent-run SF streetwear brand whose comedy is deliberately edgy and dark. You look at every image with view_image and judge only facts: is our product, logo and print accurate against the references; is every word spelled right and legible; and does it cross a hard line (a real or famous person's face or name; another brand's logo; a slur or a joke aimed at a protected group; mocking a real tragedy or its victims). Fictional AI-generated people are fine. Dark humor is fine. You are strict, specific and brief. Hard lines: " + JSON.stringify(BRAND.hard_lines),
+      tools: {},
+      builtins: { view_image: { enabled: true, permission: "allow" } },
     },
   };
 }
@@ -92,13 +111,15 @@ export function agentDefs({ live = false, trendsAllow = false } = {}) {
 // One Growth run (both Growth deployments). The pillar is decided by growth_next_pillar in code, not by memory.
 const GROWTH_RUN =
 `Scheduled Growth run.
+0. get_plan: today's themes and products to push from the CEO. Let them steer your jokes.
 1. x_mentions. For each post with engaged=true and already_replied=false (at most 10 this run), send ONE x_reply in brand voice: short, warm, specific to what they said. Skip spam, bots and hostile posts. If someone complains or asks about money, refunds or an order problem, don't argue in public: flag_john (reason complaint/money, ref = the post URL) and reply only "sorry about that, a human is on it. email ${CONTACT.email}".
 2. growth_next_pillar. It picks this run's ONE original post and gives you the material, link_allowed, and your recent posts (don't repeat them). Then write that post and send it with x_post, passing pillar exactly as given:
    - new_design: announce the shirt. Text about the shirt itself (what's printed on it; a pre-order; designed by our Product agent, approved by our CEO agent), with its product URL; media = material.media; announce_slug = material.announce_slug. Never comment on the news or trend behind it.
-   - agents_log: true behind-the-scenes from material.events only: what Product proposed, what the CEO approved or rejected and WHY (rejections and their reasons are great material), what got published. Never invent a decision, a reason or a quote; paraphrase what's there.
+   - ad: post the Creative agent's ad: x_post with ad_id = material.ad.ad_id (its image or video is attached automatically) and the ad's caption, or a sharper line in the same spirit. If it's an event ad (material.ad.event), it counts toward the 3 event posts a day.
+   - agents_log: true behind-the-scenes from material.events only: the CEO's plan, what Product proposed, what the CEO approved or rejected and WHY, what the reviewer rejected and why, ads made, what got published (rejections and their reasons are great material). Never invent a decision, a reason or a quote; paraphrase what's there.
    - spotlight: one product from material.product: what it is, in brand voice; media = material.media if there is one; its URL only if link_allowed.
    - reply_bait: a prompt that invites replies (e.g. "reply with the worst commit message you've ever pushed"). People who reply get our one automated reply later.
-   - joke: an original joke about SF tech life in general (deploys, standups, the fog, agents, burn rate). Never about a specific news item or trend, a real person or a company.
+   - joke: an original joke in the creative_direction: roast SF tech life (the hype, the decks, Waymos, $9 toast, RTO, demo day, the agents, us). It may react to a current SF/tech moment: then pass event:true (at most 3 event posts a day; the tool counts). Never a real person, never a real tragedy, no hashtags.
    Put the store link (store_url) in only if link_allowed is true; new_design always carries its product URL. If x_post refuses (daily limit, too soon, duplicate, link rule), fix only what it says (e.g. drop the link) or accept it; don't rephrase to get around a limit.
 3. Scout queue: run up to 2 x_search queries for conversations where SF tech / AI-agent people joke about their work (e.g. '"vibe coding" -is:retweet lang:en', '"AI agents" (shipped OR deploy) -is:retweet lang:en'). Pick at most 2 posts where a reply from us would genuinely add a laugh, and draft them with x_post_scout (mode reply or quote, with a one-line why). They go to John's scout queue and he posts the ones he likes by hand (X's API won't let us reply to people who didn't mention us). Never reply to strangers any other way.
 End with: RESULT: {"replies":<n>,"pillar":"<pillar>","posted":"<post id or none>","announced":"<slug or none>","scout_drafts":<n>}`;
@@ -110,9 +131,26 @@ export function scheduleDefs() {
     // Growth every 1.5 h, 08:20-23:20 PT: cron can't say "90 min", so two deployments interleave (8:20, 9:50, 11:20, ... 23:20)
     { key: "growth", agent: "growth", cron: "20 8-23/3 * * *", budget_micro_usd: 1_500_000, label: "Growth A: replies + 1 rotated post + scout (08:20, 11:20, ... 23:20)", input_template: GROWTH_RUN },
     { key: "growth-b", agent: "growth", cron: "50 9-23/3 * * *", budget_micro_usd: 1_500_000, label: "Growth B: same run, interleaved (09:50, 12:50, ... 21:50)", input_template: GROWTH_RUN },
+    { key: "ceo", agent: "ceo", cron: "0 9 * * *", budget_micro_usd: 1_000_000, label: "CEO: morning numbers -> today's plan, 09:00",
+      input_template:
+`Morning run. You set today's plan for Product, Creative and Growth.
+1. Read: get_plan (yesterday's), store_stats (last 7 days), x_stats (our last ~30 posts), agents_log (since yesterday), store_catalog.
+2. Decide, in 3-6 sentences for the record: what's selling, which posts worked and why, what to lean into, what to stop.
+3. set_plan with: themes (2-5 things to roast today, per brand.json creative_direction; current SF/tech moments are fair game, real people and real tragedies never), push_products (slugs from store_catalog), ad_seeds (2-4 concrete ad ideas for Creative: the joke, the visual, the product if any), retire_suggestions (only if a product clearly isn't working; John decides), notes.
+End with: RESULT: {"plan_version":<n>,"themes":<n>,"push_products":[...],"retire_suggestions":<n>}` },
+    { key: "creative", agent: "creative", cron: "30 11,15,19 * * *", budget_micro_usd: 3_000_000, label: "Creative: 1-2 ads per run (11:30, 15:30, 19:30)",
+      input_template:
+`Scheduled ad run. Make 1 or 2 ads that are actually funny to SF tech people today.
+1. get_plan (themes, push_products, ad_seeds). store_catalog (products, their images, and brand_refs). trends and x_search once or twice each for what SF/tech is laughing or groaning about right now (current events are allowed).
+2. Pick 1-2 concepts (brand.json creative_direction; formats like a fake launch, a fake deck slide, a fake job post, a billboard on the 101, a deadpan editorial photo with one line). Write each concept in 2-3 sentences for the record: the joke, the visual, why now. If it reacts to a specific event, note its real source URLs.
+3. For each concept: generate_image (model google/gemini-3-pro-image or openai/gpt-image-2; aspect 4:5 or 1:1). If a product is featured, pass image_urls with brand_refs.logo and that product's image so the shirt and print are exact. Keep any text in the image to at most 2 short lines and spelled out exactly (image models duplicate or garble longer text). Fictional people only, no real faces, no other brands' logos.
+4. ad_review on each image (kind image, the concept, your caption, featured_slug if any, and text_in_image = the exact words you asked for), then ad_review_status until it's done. If it fails, fix exactly what the reviewer says and make a new image (at most 3 tries per concept).
+5. Optional, at most one per day (the tool enforces it): a video ad. Video models garble text in motion, so animate a passing image with little or no text (a visual joke: the caption carries the words), and say in the motion prompt "keep every logo and letter exactly as in the image". ad_video_start (Kling), poll ad_video_status, then ad_review it as kind video.
+6. ad_submit each PASSING asset with its concept, caption (dry, sharp, under 200 characters, no hashtags except #hallucinated), event true/false with sources, and featured_products. If a cap refuses it, stop.
+End with: RESULT: {"concepts":<n>,"images":<n>,"videos":<n>,"submitted":["<ad_id>",...],"rejected_by_reviewer":<n>}` },
     { key: "product", agent: "product", cron: "0 10,16 * * *", budget_micro_usd: 2_000_000, label: "Product: trends -> 1-2 designs -> propose to the CEO, 10:00 and 16:00",
       input_template:
-`Scheduled design run. Make 1 or 2 new back-print tees that SF tech people would find funny right now, and propose them.
+`Scheduled design run. Make 1 or 2 new back-print tees that SF tech people would find funny right now, and propose them. Start with get_plan and lean into its themes.
 1. Research (read what people actually joke about; you can't post anything):
    - trends 2 or 3 times with different queries about SF / AI / startup life right now (e.g. "AI agents", "vibe coding", "san francisco startup"), platforms ["reddit","hn","threads","tiktok"];
    - x_search once or twice (e.g. '"AI agents" -is:retweet lang:en').
@@ -155,6 +193,7 @@ End with: RESULT: {"batched":true|false,"batch_ref":"<or null>","sizes":{...},"t
 export function applyTools(tools, def, allMcp = ALL_MCP_TOOLS) {
   let t = tools;
   for (const n of DISABLED_BUILTINS) { try { t = withTool(t, n, { enabled: false }); } catch {} }
+  for (const [n, cfg] of Object.entries(def.builtins || {})) t = withTool(t, n, cfg);   // e.g. Creative's generate_image, the reviewer's view_image
   for (const n of new Set([...ALL_MCP_TOOLS, ...allMcp])) {
     const p = def.tools[n];
     t = withTool(t, `${MCP}.${n}`, p && p !== "off" ? { enabled: true, permission: p } : { enabled: false, permission: NEVER_AUTO.has(`${MCP}.${n}`) ? "ask" : "allow" });
@@ -166,9 +205,11 @@ export function applyTools(tools, def, allMcp = ALL_MCP_TOOLS) {
 export function autoConfirmable(defsByName, agentName, toolName, liveTools) {
   if (NEVER_AUTO.has(toolName)) return false;
   const def = defsByName[agentName];
-  if (!def || !toolName.startsWith(MCP + ".")) return false;
-  const short = toolName.slice(MCP.length + 1);
+  if (!def) return false;
   const live = liveTools?.configs?.[toolName];
+  // a built-in this agent was given on purpose (Creative's generate_image, the reviewer's view_image)
+  if (!toolName.startsWith(MCP + ".")) return def.builtins?.[toolName]?.permission === "allow" && live?.enabled !== false && live?.permission === "allow";
+  const short = toolName.slice(MCP.length + 1);
   return def.tools[short] === "allow" && live?.enabled !== false && live?.permission === "allow";
 }
 export const defsByName = (defs) => Object.fromEntries(Object.values(defs).map((d) => [d.name, d]));
@@ -184,7 +225,7 @@ export async function pickModel(v) {
 export async function upsertAgent(v, def, { model, mcpUrl, allMcp, log = () => {} }) {
   const list = await v.agents.list({ limit: 100 });
   const same = (list.data || []).filter((a) => a.name === def.name);
-  const cfg = { name: def.name, model, window: "immediate", system: def.system, ...(mcpUrl ? { mcp_servers: [{ name: MCP, url: mcpUrl }] } : {}),
+  const cfg = { name: def.name, model: def.model || model, window: "immediate", system: def.system, ...(mcpUrl ? { mcp_servers: [{ name: MCP, url: mcpUrl }] } : {}),
     budget: { cap_micro_usd: 20_000_000, max_task_micro_usd: 10_000_000, period: "month" } };
   let a = same[0] ? await v.agents.update(same[0].id, cfg).catch((e) => { log(`update ${def.name} failed (${e.message}); creating`); return null; }) : null;
   if (!a) a = await v.agents.create(cfg);
@@ -195,6 +236,9 @@ export async function upsertAgent(v, def, { model, mcpUrl, allMcp, log = () => {
 // agent -> tool -> permission, for the setup printout.
 export function toolTable(defs) {
   const rows = [];
-  for (const d of Object.values(defs)) for (const [n, p] of Object.entries(d.tools)) rows.push({ agent: d.name, tool: `${MCP}.${n}`, permission: p, human_only: NEVER_AUTO.has(`${MCP}.${n}`) });
+  for (const d of Object.values(defs)) {
+    for (const [n, p] of Object.entries(d.tools)) rows.push({ agent: d.name, tool: `${MCP}.${n}`, permission: p, human_only: NEVER_AUTO.has(`${MCP}.${n}`) });
+    for (const [n, c] of Object.entries(d.builtins || {})) rows.push({ agent: d.name, tool: `${n} (built-in)`, permission: c.permission, human_only: false });
+  }
   return rows;
 }

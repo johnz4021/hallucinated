@@ -1,15 +1,17 @@
 // Growth's content rotation, decided in code (state lives in the X ledger, not the LLM's memory).
-// One original post per run:
+// One original post per run (ad = a reviewed ad from the Creative agent, right after new_design):
 //   new_design  whenever an agent design is published and not yet announced (always first)
 //   else rotate agents_log -> spotlight -> reply_bait -> joke, skipping a pillar with nothing to say
 //   (agents_log: nothing new in the design ledger since the last agents_log post; spotlight: no product to show).
 // Link rule: at most 1 in 3 original posts carries the store link. new_design announcements are exempt (they always link)
 // and don't count toward the window.
 export const ROTATION = ["agents_log", "spotlight", "reply_bait", "joke"];
-export const PILLARS = ["new_design", ...ROTATION];
+export const PILLARS = ["new_design", "ad", ...ROTATION];
 
-export function nextPillar({ lastRotation, hasNewDesign, agentsLogNew, spotlightAvailable }) {
+// new_design first, then a queued ad (Creative's reviewed ads), then the rotation
+export function nextPillar({ lastRotation, hasNewDesign, hasAd, agentsLogNew, spotlightAvailable }) {
   if (hasNewDesign) return "new_design";
+  if (hasAd) return "ad";
   const can = { agents_log: !!agentsLogNew, spotlight: !!spotlightAvailable, reply_bait: true, joke: true };
   const start = ROTATION.indexOf(lastRotation) + 1;   // -1 + 1 = 0 when nothing has run yet
   for (let i = 0; i < ROTATION.length; i++) { const p = ROTATION[(start + i) % ROTATION.length]; if (can[p]) return p; }

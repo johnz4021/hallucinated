@@ -76,6 +76,7 @@ export function parseOrders(sessions, lineItems, { drop = "drop-1", unbatchedOnl
       const row = {
         ...base, line: i, shape: legacy ? "legacy" : "cart",
         design_id: pm.design_id || prod.design_id || s.metadata?.design_id || null,
+        slug: pm.slug || prod.slug || null,
         garment: normGarment(pm.garment || prod.garment || (legacy ? "tee" : null)),     // the legacy store sold only the black tee
         color: normColor(pm.color || prod.color || (legacy ? "black" : null)),
         size: normSize(pm.size || prod.size || (legacy ? s.metadata?.size : null)),

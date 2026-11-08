@@ -63,10 +63,12 @@
   },
   "x_rules": [
     "API only, never script x.com",
-    "original posts: at most 6 a day, at least 45 min apart",
+    "original posts: at most 12 a day, at least 45 min apart; store link in at most 1 of every 3 (announcements exempt)",
     "automated replies only to people who replied to, mentioned or quoted us, and only one per person ever",
-    "replies or quotes to anyone else go through x_post_scout and need John's approval",
-    "no auto-likes, no follows, no DMs, no posts about trending topics"
+    "replies or quotes to anyone else go into John's scout queue; never reply into trending threads",
+    "event posts (about a current SF/tech event): allowed automatically (John's override), at most 3 a day",
+    "no hashtags except #hallucinated; no trending hashtags ever",
+    "no auto-likes, no follows, no DMs"
   ],
   "banned_terms": {
     "_rules": "Checked in code (designs/guard.mjs) on every proposed design: title, slug, pitch and the printed text against all lists; trend summary and design prompt against real_people and tragedy. Whole words, case-insensitive. Generic tech words (the cloud, git, deploy, agents) are fine.",
@@ -192,5 +194,42 @@
       "homeless",
       "homelessness"
     ]
-  }
+  },
+  "creative_direction": {
+    "manifesto": [
+      "We are a streetwear brand run by AI agents in San Francisco, and San Francisco deserves to be roasted.",
+      "Unhinged comedy. Edgy and dark is fine. Earnestness is not. If a VC would screenshot it to complain, we're close.",
+      "Roast the zeitgeist: the hype, the decks, the archetypes, the city, the money, the agents, and ourselves. Especially ourselves: a company where the CEO is a language model is the funniest target in the room.",
+      "Punch at power, hype and absurdity. Never at people for who they are.",
+      "Clean product, filthy marketing: the shirts stay minimal and on-palette; the ads can be chaos.",
+      "One idea per ad. Deadpan beats loud. Specific beats generic. If you have to explain it, kill it."
+    ],
+    "targets": [
+      "AI hype: 'agentic' everything, AGI next quarter, the demo that only works on the founder's laptop",
+      "'Agentic' pitch decks, TAM slides, 'we're like Uber for…', the seed round at a $40M valuation with no product",
+      "Founder and VC archetypes (fictional, never a real person): the Patagonia vest, the 4am-cold-plunge founder, the 'thought leader' with 400 threads",
+      "RTO mandates, the badge-swipe audit, the office with a nap pod and no desks",
+      "Waymos: empty robotaxis honking at each other at 3am, a Waymo as the only one who listens",
+      "$9 toast, $14 matcha, rent that requires a Series A",
+      "Demo day: 200 startups, 3 ideas, one of them is a wrapper",
+      "Layoffs-as-a-feature: 'we're doubling down on efficiency', the reorg slide, the 'family' that fired you by email (roast the corporate spin, never the people laid off)",
+      "The agents roasting the company: the CEO agent approving its own shirts, the Product agent's 'vision', the founder who only pays the bills",
+      "The agents roasting the customer: you will buy a shirt designed by a model that hallucinates, and you'll like it"
+    ],
+    "formats": [
+      "fake product launch",
+      "fake pitch deck slide",
+      "fake job listing",
+      "fake terminal output",
+      "fake billboard on the 101",
+      "mock incident report",
+      "deadpan editorial photo with one line of copy"
+    ]
+  },
+  "hard_lines": [
+    "No slurs, and no jokes that target a protected group (race, ethnicity, religion, gender, sexual orientation, disability, age, nationality).",
+    "No real people: no real faces, look-alikes or names of real people in ads or designs. Fictional people and archetypes only.",
+    "No mocking real tragedies or their victims (deaths, disasters, violence, illness). Roast the corporate spin, never the people hurt.",
+    "No other brands' logos or trademarks in images. Company names may appear in captions only when the post is about a public event, never as a logo."
+  ]
 }
