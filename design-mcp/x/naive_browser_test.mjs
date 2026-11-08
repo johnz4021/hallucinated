@@ -25,6 +25,14 @@ await ok("session: no computer; renew=false reports closed / expiring", async ()
   assert.match((await naiveSession(fake({ statusThrows: true }).v, "c", { renew: false })).reason, /no browser is open/);
   assert.match((await naiveSession(fake({ status: { status: "closed", timeout_at: new Date().toISOString() } }).v, "c", { renew: false })).reason, /closed/);
 });
+await ok("Naïve at capacity on status or reopen -> transient skip, never expired/paused", async () => {
+  const busy = { computers: { browser: () => ({ status: async () => { throw new Error("the service is at capacity"); } }) } };
+  const r1 = await naiveSession(busy, "c"); assert.equal(r1.transient, true); assert.equal(r1.expired, undefined);
+  const reopenBusy = { computers: { browser: () => ({ status: async () => { throw new Error("404 not_found: no browser is open"); }, goto: async () => { throw new Error("429 rate_limited"); } }) } };
+  const r2 = await naiveSession(reopenBusy, "c"); assert.equal(r2.transient, true); assert.equal(r2.expired, undefined);
+  const r3 = await naiveReply({ ...base, v: busy, dry: true });
+  assert.equal(r3.transient, true); assert.equal(r3.expired, undefined); assert.equal(r3.logged_out, undefined);
+});
 await ok("session renewal: none open / closed / expiring -> new browser on the same computer via goto", async () => {
   const f1 = fake({ statusThrows: true }); const r1 = await naiveSession(f1.v, "c");
   assert.equal(r1.ok, true); assert.equal(r1.renewed, true); assert.equal(r1.session, "brw_new"); assert.deepEqual(f1.calls, [["goto", "https://x.com/home"]]);

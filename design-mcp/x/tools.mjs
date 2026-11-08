@@ -159,6 +159,16 @@ export function registerXTools(server, ctx) {
     return { id: t.id, url, text: t.text };
   }
 
+  // slugs this post announces: announce_slug, plus any unannounced published design the ad features (the ad IS its announcement)
+  const announceSlugsFor = (ad, announce_slug) => {
+    const out = new Set(announce_slug ? [announce_slug] : []);
+    if (ad) {
+      const mode = stripeClient(ctx.rootDir).mode;
+      for (const p of Object.values(loadProposals(ctx.rootDir).proposals)) if (p.state === "published" && p.mode === mode && (ad.featured_products || []).includes(p.slug) && !(DRY() ? p.announced_dry : p.announced)) out.add(p.slug);
+    }
+    return [...out];
+  };
+
   server.registerTool("x_post", {
     title: "Post to X as @hallucinateddpt (original posts)",
     description: "Publishes an ORIGINAL post on the brand's X account (public and immediate). Optional media: an image URL on our store or Blob (e.g. a product mockup), a Naïve file id (fil_…) or a design id (posts its black-tee preview). pillar: the one growth_next_pillar gave you for this run. reply_to / quote only for threading under or quoting OUR OWN posts; replies to other people go through x_reply (people who engaged with us) or x_post_scout (everyone else, queued for John). Limits enforced here: at most X_MAX_POSTS_PER_DAY originals a day (default 12), at least X_MIN_GAP_MIN minutes apart (default 45), no exact repeats, and the store link in at most 1 of every 3 posts (new-design announcements exempt).",
@@ -171,41 +181,43 @@ export function registerXTools(server, ctx) {
     try {
       // hashtags: none except #hallucinated (no trending hashtags, John's mitigation)
       const tags = badHashtags(text);
-      if (tags.length) return err(`refused: no hashtags except #hallucinated (found ${tags.join(" ")})`);
+      if (tags.length) return err(`refused: no hashtags except #hallucinated (found ${tags.join(" ")}). Fix: remove them and post again.`);
       let ad = null;
       if (pillar === "ad" || ad_id) {
         ad = loadAds(ctx.rootDir).ads[ad_id || ""];
-        if (!ad || ad.state !== "queued" || !!ad.test !== adsTestMode() || (DRY() && ad.posted_dry)) return err(`refused: ${ad_id || "(no ad_id)"} is not a queued ad; use the ad_id growth_next_pillar gave you`);
+        if (!ad || ad.state !== "queued" || !!ad.test !== adsTestMode() || (DRY() && ad.posted_dry)) return err(`refused: ${ad_id || "(no ad_id)"} is not a queued ad. Fix: use the ad_id growth_next_pillar gave you; if you did, Stop: don't call x_post again this run.`);
         media ||= ad.naive_file_id;
         event = event || ad.event;
       }
       let ann = null;
       if (announce_slug) {
         ann = announceCheck(ctx.rootDir, stripeClient(ctx.rootDir).mode, announce_slug, text);
-        if (!ann.ok) return err(`refused: ${ann.why}`);
+        if (!ann.ok) return err(`refused: ${ann.why}.${/already announced|sandbox|no published design/.test(ann.why) ? " Fix: post without announce_slug." : " Fix: add that product URL and post again (announcements are exempt from the 1-in-3 link rule)."}`);
       }
       const l = loadLedger(ctx);
       const g = l.growth || {};
       // the rotation is decided in code: an original post must use the pillar growth_next_pillar issued for this run
       if (!reply_to && g.pending?.pillar && Date.now() - new Date(g.pending.at).getTime() < 3 * 3600_000 && pillar !== g.pending.pillar)
-        return err(`refused: this run's pillar is ${g.pending.pillar} (from growth_next_pillar), not ${pillar || "unspecified"}; pass pillar "${g.pending.pillar}"`);
-      if (pillar === "new_design" && !announce_slug) return err("refused: a new_design post needs announce_slug (from growth_next_pillar)");
+        return err(`refused: this run's pillar is ${g.pending.pillar} (from growth_next_pillar), not ${pillar || "unspecified"}. Fix: pass pillar "${g.pending.pillar}" and post again.`);
+      if (pillar === "new_design" && !announce_slug) return err("refused: a new_design post needs announce_slug (from growth_next_pillar). Fix: add it and post again.");
       const link = hasStoreLink(text, storeInfo(ctx.rootDir).url);
-      if (!reply_to && link && !linkAllowed(l, pillar)) return err(`refused: the store link is in at most 1 of every ${LINK_WINDOW} posts and one of the last ${LINK_WINDOW - 1} had it; post this without the link`);
+      // an ad that announces a new design (announce_slug, or it features an unannounced published design) is exempt
+      const announcing = announceSlugsFor(ad, announce_slug);
+      if (!reply_to && link && !linkAllowed(l, pillar, { announces: announcing.length > 0 })) return err(`refused: the store link is in at most 1 of every ${LINK_WINDOW} posts and one of the last ${LINK_WINDOW - 1} had it. Fix: post this without the link.`);
       for (const id of [reply_to, quote].filter(Boolean)) {
         if (DRY() && /^dry-/.test(id)) continue;
         const t = await xGetTweet(keys, id);
-        if (t.author_id !== (await me()).id) return err(`refused: ${id} is not our post. Reply to people with x_reply (if they engaged with us) or x_post_scout (needs John's OK).`);
+        if (t.author_id !== (await me()).id) return err(`refused: ${id} is not our post. Reply to people with x_reply (if they engaged with us) or x_post_scout (needs John's OK).` + " Stop: don't retry this with x_post.");
       }
       const day = since(l, "post", 86400_000);
-      if (!reply_to && day.length >= MAX_POSTS_DAY()) return err(`refused: already ${day.length} original posts in the last 24 h (limit ${MAX_POSTS_DAY()})`);
+      if (!reply_to && day.length >= MAX_POSTS_DAY()) return err(`refused: already ${day.length} original posts in the last 24 h (limit ${MAX_POSTS_DAY()}). Stop: don't call x_post again this run.`);
       const last = day.filter((p) => !p.thread).at(-1);
-      if (!reply_to && last && Date.now() - new Date(last.at).getTime() < MIN_GAP_MIN() * 60_000) return err(`refused: last original post was ${Math.round((Date.now() - new Date(last.at).getTime()) / 60_000)} min ago (minimum gap ${MIN_GAP_MIN()} min)`);
-      if (l.posts.some((p) => p.text === text)) return err("refused: we already posted exactly this text");
-      if (event && eventPostsToday(l) >= MAX_EVENT_POSTS_PER_DAY()) return err(`refused: already ${eventPostsToday(l)} event posts in the last 24 h (limit ${MAX_EVENT_POSTS_PER_DAY()}); post something that isn't about a current event`);
+      if (!reply_to && last && Date.now() - new Date(last.at).getTime() < MIN_GAP_MIN() * 60_000) return err(`refused: last original post was ${Math.round((Date.now() - new Date(last.at).getTime()) / 60_000)} min ago (minimum gap ${MIN_GAP_MIN()} min). Stop: don't call x_post again this run.`);
+      if (l.posts.some((p) => p.text === text)) return err("refused: we already posted exactly this text. Fix: write a different post.");
+      if (event && eventPostsToday(l) >= MAX_EVENT_POSTS_PER_DAY()) return err(`refused: already ${eventPostsToday(l)} event posts in the last 24 h (limit ${MAX_EVENT_POSTS_PER_DAY()}). Fix: post something that isn't about a current event, or stop for this run.`);
       const r = await publish({ text, media, reply_to, quote, kind: "x_post" });
       const at = new Date().toISOString();
-      l.posts.push({ kind: "post", id: r.id, at, text, thread: !!reply_to, has_link: link, ...(pillar ? { pillar } : {}), ...(media ? { media } : {}), ...(announce_slug ? { announces: announce_slug } : {}),
+      l.posts.push({ kind: "post", id: r.id, at, text, thread: !!reply_to, has_link: link, ...(pillar ? { pillar } : {}), ...(media ? { media } : {}), ...(announcing.length ? { announces: announcing.join(",") } : {}),
         ...(event ? { event: true } : {}), ...(ad ? { ad_id: ad.id } : {}) });
       if (ad) mutateAds(ctx.rootDir, (x) => { Object.assign(x.ads[ad.id], DRY() ? { posted_dry: { post_id: r.id, at, text } } : { state: "posted", posted: { post_id: r.id, at, url: r.url, text } }); });
       // link the store campaign to this post (CONTENT.md §5 x_url): in the background, never fails the post; retried each Growth run
@@ -265,8 +277,13 @@ export function registerXTools(server, ctx) {
       l.growth = { ...g, pending: { pillar, at: new Date().toISOString(), ...(spot ? { spotlight_slug: spot.slug } : {}), ...(ad ? { ad_id: ad.id } : {}) } };
       saveLedger(ctx, l);
       const recent = (l.posts || []).filter((p) => p.kind === "post").slice(-8).map((p) => ({ pillar: p.pillar || null, text: p.text }));
-      ctx.log?.(`[growth_next_pillar] ${pillar} (last rotation ${g.last_rotation || "none"}, link ${linkAllowed(l, pillar) ? "allowed" : "not allowed"})`);
-      return txt({ pillar, link_allowed: linkAllowed(l, pillar), store_url: storeInfo(ctx.rootDir).url || null, material, recent_posts: recent });
+      // consistent with x_post: an ad that announces a new design MUST carry its product URL and is exempt from the link rule
+      const announces = ad ? announceSlugsFor(ad, null) : [];
+      const linkOk = linkAllowed(l, pillar, { announces: announces.length > 0 });
+      if (announces.length) Object.assign(material, { announce_slug: announces[0], link_required: (featured.find((f) => f.slug === announces[0]) || {}).url || null,
+        note: material.note + ` This ad announces the new design ${announces[0]}: include its product URL (required) and pass announce_slug "${announces[0]}"; announcements are exempt from the 1-in-3 link rule.` });
+      ctx.log?.(`[growth_next_pillar] ${pillar} (last rotation ${g.last_rotation || "none"}, link ${announces.length ? "required (announcement)" : linkOk ? "allowed" : "not allowed"})`);
+      return txt({ pillar, link_allowed: linkOk, link_required: announces.length > 0, store_url: storeInfo(ctx.rootDir).url || null, material, recent_posts: recent });
     } catch (e) { return err(`growth_next_pillar failed: ${e.message}`); }
   });
 
@@ -307,8 +324,8 @@ export function registerXTools(server, ctx) {
       const t = await xGetTweet(keys, in_reply_to);
       if (!engagedWithUs(t, m)) return err("refused: that post doesn't reply to, mention or quote us. Automated replies only go to people who engaged with us; draft it for x_post_scout instead.");
       const l = loadLedger(ctx);
-      if (l.replied_authors[t.author_id]) return err(`refused: @${t.author} already got our one automated reply (${l.replied_authors[t.author_id].reply_id})`);
-      if (since(l, "reply", 86400_000).length >= MAX_REPLIES_DAY()) return err(`refused: daily automated reply limit (${MAX_REPLIES_DAY()}) reached`);
+      if (l.replied_authors[t.author_id]) return err(`refused: @${t.author} already got our one automated reply (${l.replied_authors[t.author_id].reply_id}). Skip this person.`);
+      if (since(l, "reply", 86400_000).length >= MAX_REPLIES_DAY()) return err(`refused: daily automated reply limit (${MAX_REPLIES_DAY()}) reached. Stop: skip replies for the rest of this run.`);
       const r = await publish({ text, reply_to: in_reply_to, kind: "x_reply" });
       l.replied_authors[t.author_id] = { username: t.author, tweet_id: t.id, reply_id: r.id, at: new Date().toISOString() };
       l.posts.push({ kind: "reply", id: r.id, at: new Date().toISOString(), text, to: t.author });
@@ -336,8 +353,8 @@ export function registerXTools(server, ctx) {
       const t = await xGetTweet(keys, target_id);
       if (t.author_id === m.id) return err("refused: that's our own post; use x_post");
       const l = loadLedger(ctx);
-      if (l.scouted_authors[t.author_id]) return err(`refused: we already sent @${t.author} a scout ${l.scouted_authors[t.author_id].mode}`);
-      if (since(l, "scout", 86400_000).length >= MAX_SCOUT_DAY()) return err(`refused: daily scout limit (${MAX_SCOUT_DAY()}) reached`);
+      if (l.scouted_authors[t.author_id]) return err(`refused: we already sent @${t.author} a scout ${l.scouted_authors[t.author_id].mode}. Skip this person.`);
+      if (since(l, "scout", 86400_000).length >= MAX_SCOUT_DAY()) return err(`refused: daily scout limit (${MAX_SCOUT_DAY()}) reached. Stop: don't call x_post_scout again this run.`);
       const at = new Date().toISOString();
       const intent = mode === "reply"
         ? `https://x.com/intent/post?in_reply_to=${encodeURIComponent(t.id)}&text=${encodeURIComponent(text)}`
@@ -384,14 +401,14 @@ export function registerXTools(server, ctx) {
       const id = (String(target_url).match(/(?:x|twitter)\.com\/[^/]+\/status\/(\d+)/) || [])[1];
       if (!id) return err("refused: target_url must be an x.com/<user>/status/<id> link from x_search");
       const bad = textCheck(text);
-      if (bad) return err(`refused: ${bad}`);
+      if (bad) return err(`refused: ${bad}. Fix: rewrite the reply and try once more, or skip.`);
       if (!st.seen?.[id]) return err("refused: targets must come from your own x_search results (last 24 h); use the url x_search returned");
       const m = await me();
       const t = await xGetTweet(keys, id).catch(() => null);
       const l = loadLedger(ctx);
       const ledger = { authors: { ...(l.replied_authors || {}), ...(l.scouted_authors || {}), ...(l.browser_authors || {}) }, threads: l.browser_threads || {} };
       const tgt = targetCheck(t, { me: m, seenInSearch: !!st.seen?.[id], ledger });
-      if (tgt) return err(`refused: ${tgt}`);
+      if (tgt) return err(`refused: ${tgt}. Stop: don't retry x_browser_reply this run (one call per run).`);
       const url = `https://x.com/${t.author || "i"}/status/${id}`;
       if (DRY()) {   // X_DRY_RUN: nothing opens at all
         ctx.log?.(`[x_browser_reply X_DRY_RUN] would reply to ${url}: ${JSON.stringify(text)} (${why})`);

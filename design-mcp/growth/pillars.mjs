@@ -18,8 +18,11 @@ const originals = (ledger) => (ledger.posts || []).filter((p) => p.kind === "pos
 export const lastOriginal = (ledger) => originals(ledger).at(-1) || null;
 export const LINK_WINDOW = 3;
 // a non-announcement post may link only if none of the previous LINK_WINDOW-1 non-announcement originals did
-export const linkAllowed = (ledger, pillar) => pillar === "new_design"
-  || !originals(ledger).filter((p) => p.pillar !== "new_design").slice(-(LINK_WINDOW - 1)).some((p) => p.has_link);
+// Announcements (a new_design post, or an ad that announces a new agent design: it MUST carry the product URL) are exempt
+// and don't count toward the window (Sat 23:30: the two rules contradicted each other and Growth looped 8x).
+const isAnnouncement = (p) => p.pillar === "new_design" || !!p.announces;
+export const linkAllowed = (ledger, pillar, { announces = false } = {}) => pillar === "new_design" || announces
+  || !originals(ledger).filter((p) => !isAnnouncement(p)).slice(-(LINK_WINDOW - 1)).some((p) => p.has_link);
 export const hasStoreLink = (text, storeUrl) => {
   const host = (() => { try { return new URL(storeUrl).host; } catch { return "hallucinated-store.vercel.app"; } })();
   return String(text).toLowerCase().includes(host.toLowerCase());

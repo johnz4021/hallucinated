@@ -22,12 +22,16 @@ export const ACT_TYPE = "type %reply% into the reply box";
 // The hosted browser on this computer, renewed if needed. -> { ok, b, timeout_at, session, renewed? } | { ok:false, expired, reason }
 // Renewal: closed / missing / under minLeftMs left -> (close) + goto x.com/home, which opens a new browser on the same
 // computer with its config (saved login included). Logged-in is checked by the caller, by text.
+// Naïve busy / network trouble: never a reason to pause (only a confirmed logout or an X challenge pauses)
+export const isTransient = (e) => /429|capacity|rate.?limit|did not answer|timed? ?out|ECONNRESET|ENOTFOUND|fetch failed|\b50[0-9]\b/i.test(String(e?.message || e));
 export async function naiveSession(v, computerId, { minLeftMs = 3 * 60_000, renew = true, log = () => {} } = {}) {
   if (!computerId) return { ok: false, expired: true, reason: "no Naïve browser computer set (naive_browser_status.command <cmp_id>)" };
   const b = v.computers.browser(computerId);
   const read = async () => { try { return await b.status(); } catch (e) { if (/404|not.found|no browser/i.test(e.message)) return null; throw e; } };
   let st;
-  try { st = await read(); } catch (e) { return { ok: false, expired: true, reason: `browser status failed: ${e.message.slice(0, 120)}` }; }
+  // Naïve "at capacity" / 429 / 5xx / network while reading the status is Naïve being busy, not an expired session:
+  // skip this reply (transient), never pause (Sat 22:37: a 429 here paused browser replies and flagged John)
+  try { st = await read(); } catch (e) { return { ok: false, transient: true, reason: `the Naïve browser didn't answer (${e.message.slice(0, 120)}); skipped this reply, try next run` }; }
   const usable = (x) => x && x.status === "active" && new Date(x.timeout_at) - Date.now() >= minLeftMs;
   if (usable(st)) return { ok: true, b, timeout_at: st.timeout_at, session: st.id };
   if (!renew) return { ok: false, expired: true, reason: !st ? "no browser is open on the Naïve computer" : `the Naïve browser session is ${st.status} (until ${st.timeout_at})` };
@@ -37,7 +41,10 @@ export async function naiveSession(v, computerId, { minLeftMs = 3 * 60_000, rene
     if (st && st.status === "active") await b.close().catch(() => {});
     await b.goto("https://x.com/home");
     st = await read();
-  } catch (e) { return { ok: false, expired: true, reason: `${why} and a new one didn't open (${e.message.slice(0, 120)})` }; }
+  } catch (e) {
+    if (isTransient(e)) return { ok: false, transient: true, reason: `${why}; Naïve was busy reopening it (${e.message.slice(0, 100)}); skipped this reply, try next run` };
+    return { ok: false, expired: true, reason: `${why} and a new one didn't open (${e.message.slice(0, 120)})` };
+  }
   if (!usable(st)) return { ok: false, expired: true, reason: `${why} and the new one isn't usable (${st ? st.status : "none"})` };
   return { ok: true, b, timeout_at: st.timeout_at, session: st.id, renewed: true };
 }

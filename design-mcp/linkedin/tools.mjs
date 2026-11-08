@@ -29,6 +29,20 @@ export const killSwitch = (root) => readJson(path.join(root, "linkedin-ledger.js
 const MAX_PER_DAY = () => Number(process.env.LI_MAX_PER_DAY || 1);
 const ptDay = (d) => new Intl.DateTimeFormat("en-CA", { timeZone: "America/Los_Angeles", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(d));
 
+// Post formats after the takeover opener (John: "then in whatever joking format they want"); rotated in code, no repeats in a row
+export const LI_FORMATS = {
+  press_release: "a fake press release (FOR IMMEDIATE RELEASE, dateline San Francisco, quotes from the CEO agent)",
+  influencer_listicle: "a LinkedIn-influencer listicle: '7 things we learned taking over a human's LinkedIn' with one-line points",
+  org_chart_memo: "an internal org-chart memo announcing the new structure (John reports to the agents now)",
+  performance_review: "a performance review of John written by the agents: strengths, growth areas, rating",
+  hiring_post: "a hiring post: 'We're hiring (a human, to pay for things)', with requirements and perks",
+  all_hands_update: "a quarterly all-hands update with fake OKRs and real numbers from the agents' log",
+  incident_postmortem: "an incident postmortem: 'Incident: the agents took over LinkedIn', timeline, root cause, action items",
+};
+export function pickLiFormat(lastFormat, rng = Math.random) {
+  const pool = Object.keys(LI_FORMATS).filter((f) => f !== lastFormat);
+  return pool[Math.floor(rng() * pool.length)];
+}
 // The sponsors we tag (company pages). vanity = LinkedIn's company URL slug, used only for the API lookup.
 export const SPONSORS = [
   { name: "Naïve", vanity: "usenaive" }, { name: "AgentMail", vanity: "agentmail" }, { name: "MobileRun", vanity: "mobilerun" },
@@ -93,15 +107,21 @@ export function registerLinkedInTools(server, ctx) {
     inputSchema: {},
   }, async () => {
     const c = candidates(loadAds(root).ads, readJson(path.join(root, "launch-images.json"), {}));
-    return txt({ count: c.length, images: c.slice(0, 12), allowed_today: !scheduleCheck(killSwitch(root)), why_not: scheduleCheck(killSwitch(root)) });
+    // today's format, picked in code (no repeat of the last post's format); kept as pending until linkedin_post uses it
+    const l = loadLedger(root);
+    const format = l.pending_format && Date.now() - new Date(l.pending_format.at).getTime() < 6 * 3600_000 ? l.pending_format.format : pickLiFormat(l.last_format);
+    if (!l.pending_format || l.pending_format.format !== format) { l.pending_format = { format, at: new Date().toISOString() }; saveLedger(root, l); }
+    return txt({ count: c.length, images: c.slice(0, 12), format, format_how: LI_FORMATS[format], allowed_today: !scheduleCheck(killSwitch(root)), why_not: scheduleCheck(killSwitch(root)),
+      voice: "first person plural: John's AI agents taking over his LinkedIn; never write as John" });
   });
 
   server.registerTool("linkedin_post", {
     title: "Post the daily LinkedIn takeover on John's profile",
     description: "Publishes ONE post on John's personal LinkedIn (official API): your text, 1-4 of our images by id from linkedin_images (cropped to 4:5), and @mentions of our sponsors' company pages (Naïve, AgentMail, MobileRun, Stripe, Vercel). Write \"@Stripe\" etc. in the text where you want each tag; any sponsor not written in the text is thanked in a closing line; a sponsor whose page can't be resolved stays a plain name. Checked in code: 1 post per Pacific day, kill switch, hard lines, our images only. Returns the post URL.",
     inputSchema: { text: z.string().min(60).max(2800), image_ids: z.array(z.string()).min(1).max(4).optional(), mentions: z.array(z.string()).max(5).optional(),
-      image: z.string().optional().describe("(older form) one image id or URL"), alt_text: z.string().max(300).optional() },
-  }, async ({ text, image_ids, mentions = SPONSORS.map((s) => s.name), image, alt_text }) => {
+      image: z.string().optional().describe("(older form) one image id or URL"), alt_text: z.string().max(300).optional(),
+      format: z.string().max(40).optional().describe("the format linkedin_images gave you") },
+  }, async ({ text, image_ids, mentions = SPONSORS.map((s) => s.name), image, alt_text, format }) => {
     try {
       const dry = dryMode();
       const sched = scheduleCheck(killSwitch(root));
@@ -123,7 +143,7 @@ export function registerLinkedInTools(server, ctx) {
       if (dry) {
         const images = picked.map((p, i) => ({ urn: `urn:li:image:DRY-${i + 1}`, alt: alt(p), source_url: p.url }));
         const body = postBody(t || { person_urn: "urn:li:person:DRY" }, { commentary, images });
-        const l = loadLedger(root); l.posts = [...(l.posts || []), { at: new Date().toISOString(), dry: true, chars: text.length, images: images.length, mentions: orgs }].slice(-50); saveLedger(root, l);
+        const l = loadLedger(root); l.posts = [...(l.posts || []), { at: new Date().toISOString(), dry: true, chars: text.length, images: images.length, mentions: orgs, format: format || l.pending_format?.format || null }].slice(-50); saveLedger(root, l);
         ctx.log?.(`[linkedin_post DRY] ${images.length} image(s), mentions ${orgs.map((o) => `${o.name}:${o.urn ? "tagged" : "plain"}`).join(" ")}`);
         return txt({ dry_run: true, connected: !!t, mentions: orgs, commentary, body, image_sources: images.map((i) => i.source_url), note: "nothing uploaded or posted (LI_DRY)" });
       }
@@ -131,7 +151,10 @@ export function registerLinkedInTools(server, ctx) {
       for (const p of picked) { const f = await crop45(p.url); images.push({ urn: await uploadImage(t, f), alt: alt(p) }); fs.rmSync(f, { force: true }); }
       const r = await createPost(t, { commentary, images });
       const l = loadLedger(root);
-      l.posts = [...(l.posts || []), { at: new Date().toISOString(), id: r.id, url: r.url, chars: text.length, images: images.length, mentions: orgs.map((o) => ({ name: o.name, tagged: !!o.urn })) }].slice(-200);
+      const used = format || l.pending_format?.format || null;
+      l.posts = [...(l.posts || []), { at: new Date().toISOString(), id: r.id, url: r.url, chars: text.length, images: images.length, format: used, mentions: orgs.map((o) => ({ name: o.name, tagged: !!o.urn })) }].slice(-200);
+      if (used) l.last_format = used;
+      l.pending_format = null;
       saveLedger(root, l);
       ctx.log?.(`[linkedin_post] posted ${r.url} (${images.length} image(s); tagged ${orgs.filter((o) => o.urn).map((o) => o.name).join(", ") || "none"})`);
       return txt({ posted: true, url: r.url, images: images.length, mentions: orgs.map((o) => ({ name: o.name, tagged: !!o.urn })) });

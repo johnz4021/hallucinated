@@ -24,6 +24,13 @@ assert.equal(linkAllowed(L(["spotlight", true], ["joke", false], ["reply_bait", 
 assert.equal(linkAllowed(L(["spotlight", true], ["joke", false]), "new_design"), true);                     // exempt
 assert.equal(linkAllowed(L(["joke", false], ["new_design", true], ["reply_bait", false]), "spotlight"), true); // announcement not counted
 assert.equal(linkAllowed(L(["spotlight", true], ["joke", false], ["x", true, { thread: true }]), "agents_log"), false);
+// Sat 23:30 loop: an ad announcing a new design MUST carry its product URL, so it is exempt from the 1-in-3 rule (and
+// doesn't count toward it). Before the fix x_post refused it both with and without the link.
+const recentLinks = L(["joke", true], ["ad", false]);
+assert.equal(linkAllowed(recentLinks, "ad"), false);                                  // a normal ad: no link this time
+assert.equal(linkAllowed(recentLinks, "ad", { announces: true }), true);              // the announcing ad: link allowed (required)
+assert.equal(linkAllowed(L(["joke", false], ["ad", true, { announces: "vibe-and-pray-tee" }], ["reply_bait", false]), "joke"), true);   // announcement not counted
+assert.equal(linkAllowed(L(["ad", true, { announces: "x-tee" }], ["joke", true]), "reply_bait"), false);   // a normal link still counts
 assert.equal(hasStoreLink("see https://hallucinated-store.vercel.app/p/x-tee", "https://hallucinated-store.vercel.app"), true);
 assert.equal(hasStoreLink("no link here", "https://hallucinated-store.vercel.app"), false);
 

@@ -57,3 +57,22 @@ assert.match((await tools.linkedin_post({ text: TEXT, image_ids: ["ad:a"], menti
 assert.match((await tools.linkedin_post({ text: TEXT, image_ids: ["ad:a"] })).content[0].text, /isn't connected/);   // no token in the temp root
 console.log("tool: dry payload, kill switch, unknown image, sponsor-only mentions, needs a token: OK");
 console.log("linkedin tools tests: all OK");
+
+// format rotation in code: never the same format twice in a row; linkedin_images keeps it pending, linkedin_post records it
+{
+  const { pickLiFormat, LI_FORMATS } = await import("./tools.mjs");
+  for (const f of Object.keys(LI_FORMATS)) for (let i = 0; i < 20; i++) assert.notEqual(pickLiFormat(f), f);
+  const r2 = fs.mkdtempSync(path.join(os.tmpdir(), "li2-"));
+  fs.writeFileSync(path.join(r2, "ads.json"), JSON.stringify({ ads: { a: { id: "a", kind: "image", state: "posted", media_url: BLOB, created_at: "2026-11-08T02:00:00Z" } }, reviews: {}, videos: {} }));
+  fs.writeFileSync(path.join(r2, "linkedin-ledger.dry.json"), JSON.stringify({ last_format: "press_release", posts: [] }));
+  const t2 = {}; registerLinkedInTools({ registerTool: (n, d, h) => (t2[n] = h) }, { rootDir: r2, log: () => {} });
+  process.env.LI_DRY = "1";
+  const im = JSON.parse((await t2.linkedin_images({})).content[0].text);
+  assert.ok(LI_FORMATS[im.format] && im.format !== "press_release"); assert.match(im.voice, /first person plural/);
+  const again = JSON.parse((await t2.linkedin_images({})).content[0].text);
+  assert.equal(again.format, im.format);   // stable within the run
+  await t2.linkedin_post({ text: TEXT, image_ids: ["ad:a"] });
+  assert.equal(JSON.parse(fs.readFileSync(path.join(r2, "linkedin-ledger.dry.json"), "utf8")).posts.at(-1).format, im.format);
+  delete process.env.LI_DRY;
+  console.log("format rotation: no repeats, stable per run, recorded on the post: OK");
+}
