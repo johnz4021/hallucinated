@@ -15,6 +15,7 @@ import { checkProposal, SLUG_RE } from "./guard.mjs";
 import { STYLES, issueStyle, loadStyleLedger, familyOf } from "./styles.mjs";
 import { loadProposals, saveProposals, updateProposal, newProposalId, proposalsToday, publishesToday, publishedDesign, openProposal, slugTaken, MAX_PROPOSALS_PER_DAY, MAX_PUBLISHES_PER_DAY } from "./ledger.mjs";
 import { publishDesign, storeAdmin, activeProducts, placementOf, STORE, PRICE_CENTS } from "./publish.mjs";
+import { kickLaunchImages } from "./launch.mjs";
 
 // The design's art style + family, from the proposal (recorded from the QA verdict) or the verdict itself.
 export const styleOf = (p, verdict) => {
@@ -150,7 +151,9 @@ export function registerDesignTools(server, ctx) {
         const pub = await publishDesign({ rootDir: ctx.rootDir, sc, admin, proposal: { ...p, decision: d }, outDir: ctx.outDir, log: ctx.log });
         updateProposal(ctx.rootDir, proposal_id, { state: "published", publish: pub });
         ctx.log?.(`[ceo_decide] ${proposal_id} ${p.slug} APPROVED and published (${pub.mode}) ${pub.url} product ${pub.product_id}`);
-        return txt({ proposal_id, state: "published", mode: pub.mode, url: pub.url, product_id: pub.product_id, dossier: pub.dossier });
+        // launch images (on-model photos, CONTENT.md §6): background job, never blocks or fails the publish
+        const launch = kickLaunchImages(ctx, { ...p, decision: d }, pub);
+        return txt({ proposal_id, state: "published", mode: pub.mode, url: pub.url, product_id: pub.product_id, dossier: pub.dossier, ...(launch ? { launch_images: "being made in the background (2-3 on-model photos, reviewed, then added to the product page)" } : {}) });
       } catch (e) {
         updateProposal(ctx.rootDir, proposal_id, { state: e.permanent ? "rejected" : "publish_failed", publish_error: e.message });
         flagJohn(ctx, { reason: "other", from_agent: "ceo (ceo_decide)", ref: proposal_id, summary: `Approved design ${p.slug} (${p.design_id}) didn't publish: ${e.message}` });
