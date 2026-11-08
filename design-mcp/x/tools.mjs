@@ -13,6 +13,7 @@ import { announceCheck, markAnnounced, newDesigns } from "../designs/tools.mjs";
 import { storeCatalog } from "../creative/catalog.mjs";
 import { creativeEvents, loadAds, mutateAds, queuedAds, testMode as adsTestMode, MAX_EVENT_POSTS_PER_DAY } from "../creative/ledger.mjs";
 import { badHashtags } from "../creative/tools.mjs";
+import { attachXUrl, backfillXUrls } from "../creative/x_urls.mjs";
 import { PILLARS, LINK_WINDOW, nextPillar, linkAllowed, hasStoreLink, agentsLogEvents, pickSpotlight } from "../growth/pillars.mjs";
 import { loadProposals } from "../designs/ledger.mjs";
 import { flagJohn } from "../agentmail/tools.mjs";
@@ -205,6 +206,8 @@ export function registerXTools(server, ctx) {
       l.posts.push({ kind: "post", id: r.id, at, text, thread: !!reply_to, has_link: link, ...(pillar ? { pillar } : {}), ...(media ? { media } : {}), ...(announce_slug ? { announces: announce_slug } : {}),
         ...(event ? { event: true } : {}), ...(ad ? { ad_id: ad.id } : {}) });
       if (ad) mutateAds(ctx.rootDir, (x) => { Object.assign(x.ads[ad.id], DRY() ? { posted_dry: { post_id: r.id, at, text } } : { state: "posted", posted: { post_id: r.id, at, url: r.url, text } }); });
+      // link the store campaign to this post (CONTENT.md §5 x_url): in the background, never fails the post; retried each Growth run
+      if (ad && !DRY()) me().then((m) => attachXUrl({ rootDir: ctx.rootDir, adId: ad.id, username: m.username, postId: r.id, log: ctx.log })).catch((e) => ctx.log?.(`[x_url] ${ad.id}: ${e.message}`));
       if (!reply_to && pillar) {
         l.growth = { ...g, pending: null, last_pillar: pillar, ...(!["new_design", "ad"].includes(pillar) ? { last_rotation: pillar } : {}),
           ...(pillar === "agents_log" ? { last_agents_log_at: at } : {}),
@@ -229,6 +232,8 @@ export function registerXTools(server, ctx) {
     inputSchema: {},
   }, async () => {
     try {
+      // retry store x_url links for posted ads (background; a 400 until the store accepts x_url is expected)
+      if (!DRY()) me().then((m) => backfillXUrls({ rootDir: ctx.rootDir, username: m.username, log: ctx.log })).catch(() => {});
       const sc = stripeClient(ctx.rootDir);
       const l = loadLedger(ctx), g = l.growth || {};
       const fresh = newDesigns(ctx.rootDir, sc.mode);

@@ -25,6 +25,7 @@ import { flagJohn } from "../agentmail/tools.mjs";
 import { checkSpend, videoPaused, imageVariants, maxAttempts, CUT_AT } from "../agents/spend_guard.mjs";
 import { findBanned } from "../designs/guard.mjs";
 import { storeAdmin } from "../designs/publish.mjs";
+import { campaignItem } from "./x_urls.mjs";
 import { ptDay } from "../designs/ledger.mjs";
 import { xKeys, xMe, xUserTweets } from "../x/xapi.mjs";
 import { storeCatalog, STORE_HOSTS } from "./catalog.mjs";
@@ -394,8 +395,7 @@ export async function publishAdToStore({ v, rootDir, ad, outDir, baseUrl }) {
       }
       mutateAds(rootDir, (x) => { Object.assign(x.ads[ad.id], { media_url, poster_url }); });
     }
-    const item = { id: ad.id, kind: ad.kind, media_url, ...(poster_url ? { poster_url } : {}), concept: ad.concept, caption: ad.caption, event: ad.event, sources: ad.sources,
-      featured_products: ad.featured_products, created_at: ad.created_at, test: !!ad.test };
+    const item = campaignItem({ ...ad, media_url, poster_url, x_url: undefined });   // x_url is added separately (x_urls.mjs), so this never 400s on it
     let campaign = { ok: false };
     for (let i = 0; i < 3; i++) {
       try { await admin.call("PATCH", "/api/admin/content", { json: { op: "upsert", collection: "campaigns", item } }); campaign = { ok: true, at: new Date().toISOString() }; break; }
