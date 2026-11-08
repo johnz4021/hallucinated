@@ -23,6 +23,8 @@ A streetwear brand on SF tech humor, run by Naïve agents (`@usenaive-sdk/vetta`
 - Dry-run switches: `X_DRY_RUN=1`, `MAIL_DRY_RUN=1` (env on serve). `STRIPE_LIVE_OK=1` must be in serve's *process* env (not `.env`) for live Stripe keys.
 - Unknown: whether the AgentMail key can send mail (never tested).
 
+- **LinkedIn (Sat 22:50, John):** `design-mcp/linkedin/` gives Growth `linkedin_images` (allow) and `linkedin_post` (ask, in NEVER_AUTO): posts to John's PERSONAL profile via the self-serve Share on LinkedIn API (company pages need LinkedIn review). Code adds a footer saying the AI Growth agent wrote it; max 2/day; images only from `ad-library/linkedin-4x5/`; ledger `linkedin-ledger.json` (feed it to /hq). Connect: `linkedin_login.command` (token in `.linkedin-token.json`, 60 days). One-off run: `linkedin_post_run.command`. `LINKEDIN_DRY_RUN=1` on serve to test.
+
 ## Status (Sat 14:20): LIVE
 - **Store live with real payments:** https://hallucinated-store.vercel.app = full phase-2 store, Stripe **live** on `acct_1UZH4b…` (Hallucinated Goods). Drop-1 tee buy-now; hoodie/cap/tote/bone tee as pre-orders (placeholder prices, John OK'd going live with them; Customania feasibility unchecked; nobody is charged until `charge_preorders`, ask). `.env` has both `STRIPE_SECRET_KEY` (sandbox, previews/e2e) and `STRIPE_LIVE_SECRET_KEY`; `STRIPE_LIVE_OK=1` (exported by serve/sales launchers) makes the agents use the live one. Vercel prod env: live key + `ALLOW_LIVE_STRIPE=1` + `STORE_ADMIN_SECRET`.
 - **Growth loop live:** deployment `dep_xkzj…` enabled, every 3 h at :20 (08:20–23:20 PT). First live post 14:18: https://x.com/hallucinateddpt/status/2119192715997168049. Support and ops-sales deployments still **paused**.

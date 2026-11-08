@@ -352,7 +352,7 @@ const NOW_LABEL = {
   courier_quote: "getting a courier quote", courier_book: "booking a courier", courier_status: "checking the courier", inbox_list: "reading the inbox",
   inbox_read: "reading an email", inbox_reply: "answering an email", stripe_orders: "reading store orders", sales_batch_start: "batching store orders",
   flag_john: "flagging the founder", charge_preorders: "charging pre-orders", order_lookup: "looking up an order", order_status: "checking an order",
-  refund_request: "waiting for a refund approval", preorder_cancel: "cancelling a pre-order",
+  refund_request: "waiting for a refund approval", linkedin_post: "posting on LinkedIn", linkedin_images: "picking LinkedIn images", preorder_cancel: "cancelling a pre-order",
 };
 const nowLabel = (n, a = {}) => n === "ad_video_start" ? `generating video${a.model ? ` (${String(a.model).split("/").pop().split("-")[0]})` : ""}` : NOW_LABEL[n] || String(n || "working").replace(/^.*\./, "").replace(/_/g, " ");
 
@@ -529,6 +529,7 @@ const TOOL_META = {
   preorders_list: ["Pre-orders", "money"], charge_preorders: ["Charge pre-orders", "money"], charge_preorders_status: ["Charge status", "money"],
   inbox_list: ["Inbox", "inbox"], inbox_read: ["Read email", "inbox"], inbox_reply: ["Reply email", "mail"], inbox_mark_handled: ["Mark handled", "inbox"],
   ops_courier_request: ["Courier request", "courier"], preorder_cancel: ["Cancel pre-order", "money"], preorder_send_payment_link: ["Payment link", "mail"],
+  linkedin_post: ["LinkedIn post", "post"], linkedin_images: ["LinkedIn images", "image"],
   flag_john: ["Flag founder", "flag"], order_lookup: ["Order lookup", "money"], order_status: ["Order status", "money"], refund_request: ["Refund", "money"],
 };
 // the storefront's icon set, exactly; anything else renders as "other"

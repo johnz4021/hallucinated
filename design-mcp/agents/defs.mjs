@@ -20,6 +20,7 @@ export const ALL_MCP_TOOLS = [
   "generate_design",
   "customania_start", "customania_upload", "customania_place", "customania_checkout", "customania_pay", "customania_handoff_payment", "customania_payment_status", "customania_close", "issue_card",
   "x_post", "x_mentions", "x_reply", "x_post_scout", "x_browser_reply", "x_search", "x_delete", "store_link", "x_ads_tools", "x_ads", "x_ads_activate",
+  "linkedin_images", "linkedin_post",
   "courier_quote", "courier_book", "courier_status",
   "inbox_list", "inbox_read", "inbox_reply", "inbox_mark_handled", "flag_john", "ops_courier_request",
   "stripe_orders", "sales_batch_start", "stripe_mark_batched", "sales_batch_abort",
@@ -29,7 +30,7 @@ export const ALL_MCP_TOOLS = [
   "get_plan", "set_plan", "store_stats", "x_stats", "store_catalog", "next_design_style", "next_ad_format", "ad_concepts", "ad_image_generate", "ad_image_status", "ad_video_start", "ad_video_compose", "ad_video_status", "ad_review", "ad_review_status", "ad_submit",
 ];
 // Never confirmed by code, whatever an agent's config says: a human decides each call in Naïve Studio.
-export const NEVER_AUTO = new Set(["customania_handoff_payment", "courier_book", "x_ads_activate", "issue_card", "charge_preorders", "refund_request"].map((n) => `${MCP}.${n}`));
+export const NEVER_AUTO = new Set(["customania_handoff_payment", "courier_book", "x_ads_activate", "issue_card", "charge_preorders", "refund_request", "linkedin_post"].map((n) => `${MCP}.${n}`));
 
 // EVERY Naïve built-in and platform tool (SDK 0.11.0: BUILTIN_TOOLS + PLATFORM_TOOLS + TRADING_WRITE_TOOLS). Like unnamed
 // hallucinated.* tools, an unnamed built-in defaults to enabled, and some park on an approval card nobody expects (Product's
@@ -107,7 +108,8 @@ export function agentDefs({ live = false, trendsAllow = false } = {}) {
     growth: {
       name: "hallucinated-growth",
       system: VOICE + "\nYou are Growth. You run the brand's X account (@hallucinateddpt) through the hallucinated x_* tools, inside X's automation rules (brand.json x_rules; the tools enforce them too): original posts with x_post, exactly one automated reply per person who replied to, mentioned or quoted us with x_reply, and replies to anyone else either through x_browser_reply (at most ONE per run, on a fresh on-topic post from your own x_search; the tool enforces about one an hour) or as drafts through x_post_scout, which queues them for John to post by hand. Your voice is brand.json creative_direction: unhinged, edgy, dry; roast SF tech, the hype, the city and yourselves. You may post about current SF/tech moments (pass event:true; at most 3 a day, enforced), but never with hashtags (except #hallucinated), never into trending threads, and never about a real person or a real tragedy. Start every run with get_plan. Links only when growth_next_pillar says link_allowed; never invent a link. Never like, follow or DM. One joke per post. " + DESIGN_RULES + " " + NO_MONEY,
-      tools: { get_plan: "allow", x_post: "allow", x_mentions: "allow", x_reply: "allow", x_search: "allow", x_post_scout: "allow", x_browser_reply: "allow" /* paused: X limited the automated login Sat 16:4x; John decides on a retry */, store_link: "allow", store_new_designs: "allow", growth_next_pillar: "allow", agents_log: "allow", flag_john: "allow" },
+      tools: { get_plan: "allow", x_post: "allow", x_mentions: "allow", x_reply: "allow", x_search: "allow", x_post_scout: "allow", x_browser_reply: "allow" /* paused: X limited the automated login Sat 16:4x; John decides on a retry */, store_link: "allow", store_new_designs: "allow", growth_next_pillar: "allow", agents_log: "allow", flag_john: "allow",
+        linkedin_images: "allow", linkedin_post: "ask" /* John's own profile: needs John's approval per post until he confirms automatic (lead, Sat 23:10; security flag) */ },
     },
     support: {
       name: "hallucinated-support",
@@ -151,6 +153,16 @@ const GROWTH_RUN =
    - The rest (or the best one too, if x_browser_reply refused it): draft with x_post_scout (mode reply or quote, one-line why) for John to post by hand. Never reply to strangers any other way.
 End with: RESULT: {"replies":<n>,"pillar":"<pillar>","posted":"<post id or none>","announced":"<slug or none>","browser_reply":"<reply url, dry, refused: why, or none>","scout_drafts":<n>}`;
 
+const STORE_URL = "https://hallucinated-store.vercel.app";
+// The daily LinkedIn takeover post (deployment growth-linkedin): one post on John's LinkedIn, nothing else.
+const GROWTH_LINKEDIN_RUN =
+`Scheduled LinkedIn run: ONE post on John's personal LinkedIn, nothing else (no X posts, no replies).
+1. get_plan, agents_log (the true record of what the agents did), store_link, then linkedin_images. If linkedin_images says allowed_today is false, end right away with RESULT: {"linkedin":"skipped: <why_not>"}.
+2. THE FRAME (always make it unmistakable in the first two lines): John's AI agents have TAKEN OVER John's LinkedIn for a hackathon (the Naïve hackathon at YC, SF) and are posting as him; John is not writing this. Then write the post in LinkedIn-speak parody with the SF-zeitgeist comedy of our X posts: the humble-brag, "here's what I learned", one-line paragraphs, a few emojis; every line roasts AI hype, SF tech culture and ourselves. Example opener: "This is John's AI agents. We have taken over his LinkedIn for the hackathon. He is fine. He is approving this post right now, which is the only job we left him. 🧵" or "I'm humbled to announce my AI agents fired me from my own clothing company (they also have my LinkedIn now, it's a hackathon thing)." Use only true facts from agents_log (who did what: Product designed, the CEO agent approved or rejected with reasons, Creative made the ads, Ops ordered the prints, Support answers email, a human only pays). Plug the shop (${STORE_URL}) and the live mission control (${STORE_URL}/hq). Say once that the photos show our AI-generated models. Tag the sponsors by writing @Naïve, @AgentMail, @MobileRun, @Stripe and @Vercel where they fit (any you leave out get a thank-you line). At most 2 hashtags (#hallucinated is fine), never a real person's name, no tragedies. Under 2,000 characters.
+3. Pick 2-4 images from linkedin_images (ads first, then launch shots), different scenes.
+4. linkedin_post with text, image_ids and mentions ["Naïve","AgentMail","MobileRun","Stripe","Vercel"] (code adds a footer saying our AI Growth agent wrote it). It waits for John's approval in Naïve Studio; that's expected. If it's refused or declined, end; don't retry.
+End with: RESULT: {"linkedin":"<post url, dry, or not posted: reason>","images":<n>}`;
+
 // The reply-only Growth run (deployment growth-reply): no x_post, no scout queue, no mentions.
 const GROWTH_REPLY_RUN =
 `Scheduled reply run: exactly ONE browser reply, nothing else (no x_post, no x_post_scout, no x_mentions).
@@ -169,6 +181,8 @@ export function scheduleDefs() {
     // John, Sat 19:00: 2 browser replies an hour. A reply-only run at :05 and :35 (clear of the :20/:50 Growth runs); the
     // 25-min gap (X_BROWSER_MIN_GAP_MIN) and the daily cap in x_browser_reply handle collisions. Created paused.
     { key: "growth-reply", agent: "growth", cron: "5,35 * * * *", budget_micro_usd: 400_000, label: "Growth reply: one browser reply to a fresh on-topic post (:05, :35)", input_template: GROWTH_REPLY_RUN },
+    // John, Sat 23:00: one LinkedIn "takeover" post a day on his own profile (official API). Created paused.
+    { key: "growth-linkedin", agent: "growth", cron: "15 9 * * *", budget_micro_usd: 800_000, label: "Growth LinkedIn: one takeover post on John's LinkedIn, 09:15", input_template: GROWTH_LINKEDIN_RUN },
     { key: "ceo", agent: "ceo", cron: "0 9 * * *", budget_micro_usd: 1_000_000, label: "CEO: morning numbers -> today's plan, 09:00",
       input_template:
 `Morning run. You set today's plan for Product, Creative and Growth.

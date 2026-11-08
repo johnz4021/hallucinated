@@ -78,3 +78,6 @@ spend-guard.json
 launch-images.json
 ad-library/
 hq-agents.json
+.linkedin-token.json
+linkedin-ledger*.json
+linkedin-browser.json

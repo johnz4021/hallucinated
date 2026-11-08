@@ -15,6 +15,7 @@ import { registerPreorderTools } from "./stripe/preorders.mjs";
 import { registerSupportTools } from "./stripe/support.mjs";
 import { registerDesignTools } from "./designs/tools.mjs";
 import { registerCreativeTools } from "./creative/tools.mjs";
+import { registerLinkedInTools } from "./linkedin/tools.mjs";
 
 export function buildMcp(ctx) {
   const server = new McpServer({ name: "hallucinated", version: "0.1.0" });
@@ -63,6 +64,7 @@ export function buildMcp(ctx) {
   if (ctx.rootDir) registerSupportTools(server, ctx);
   if (ctx.rootDir) registerDesignTools(server, ctx);
   if (ctx.rootDir) registerCreativeTools(server, ctx);
+  if (ctx.rootDir) registerLinkedInTools(server, ctx);
   return server;
 }
 
