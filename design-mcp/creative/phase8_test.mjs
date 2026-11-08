@@ -93,3 +93,38 @@ console.log("phase 8 tests: all OK");
   process.env.ADS_REVIEW_STRICT = "1"; assert.equal(verdict(g).pass, false); delete process.env.ADS_REVIEW_STRICT;
   console.log("loose review gate: OK");
 }
+
+// phase 9: concepts check, quality score, reveal check, video model order
+{
+  const { conceptsCheck } = await import("./ledger.mjs");
+  const { verdict, videoModelOrder, VIDEO_MODELS, MIN_QUALITY, IMAGE_TAKE_MODELS, VIDEO_BEATS } = await import("./tools.mjs");
+  const SIT = ["A founder asleep on a beanbag at 3am wearing the tee, laptop closed", "Engineers queueing at return-to-office turnstiles in matching tees at nine",
+    "A demo day stage under hard lights, the presenter sweating through the shirt", "A robotaxi back seat selfie with direct flash and empty driver seat", "Dolores Park picnic blanket, laptop open, skyline haze behind"];
+  const c = (s, f = "x-tee", i = 0) => ({ situation: SIT[i], punchline: "p" + s, featured_slug: f, scroll_stop: s, why: "relatable" });
+  const five = [c(5, "x-tee", 0), c(8, "x-tee", 1), c(6, "x-tee", 2), c(7, "x-tee", 3), c(4, "x-tee", 4)];
+  assert.match(conceptsCheck([five[0], { ...five[1], situation: five[0].situation }, ...five.slice(2)], 1, null), /same situation/);
+  assert.equal(conceptsCheck(five, 1, "x-tee"), null);
+  assert.match(conceptsCheck(five.slice(0, 4), 1, null), /exactly 5/);
+  assert.match(conceptsCheck(five, 7, null), /pick/);
+  assert.match(conceptsCheck([...five.slice(0, 1), c(8, "other-tee", 1), ...five.slice(2)], 1, "x-tee"), /must feature x-tee/);
+  assert.match(conceptsCheck([{ ...five[0], situation: "short" }, ...five.slice(1)], 1, null), /situation/);
+  const g = { photorealistic: true, garment_worn_centre: true, no_third_party_branding: true, real_person: false, quality_score: "8", score_notes: "tighter crop" };
+  delete process.env.ADS_REVIEW_STRICT;
+  assert.equal(verdict(g).quality_score, 8); assert.equal(verdict(g).score_notes, "tighter crop");
+  assert.equal(verdict({ ...g, reveal_print_legible: false }).pass, false);   // video reveal must show the print
+  assert.equal(MIN_QUALITY(), 7);
+  assert.equal(IMAGE_TAKE_MODELS().length, 2);
+  assert.deepEqual(videoModelOrder("google/veo-3.1-fast").slice(0, 1), ["google/veo-3.1-fast"]);
+  assert.equal(new Set(videoModelOrder()).size, VIDEO_MODELS.length);
+  process.env.ADS_VIDEO_MODEL = "bytedance/seedance-2.5"; assert.equal(videoModelOrder()[0], "bytedance/seedance-2.5"); delete process.env.ADS_VIDEO_MODEL;
+  assert.match(VIDEO_BEATS, /REVEAL/);
+  console.log("phase 9: concepts, quality score, reveal, video model order: OK");
+}
+{
+  const { verdict, secondsFor } = await import("./tools.mjs");
+  delete process.env.ADS_REVIEW_STRICT;
+  const g = { photorealistic: true, garment_worn_centre: true, garment_matches: true, no_third_party_branding: true };
+  assert.equal(verdict(g).pass, true); assert.equal(verdict({ ...g, garment_matches: false }).pass, false);   // print on a jacket = fail
+  assert.equal(secondsFor("google/veo-3.1", 7), 6); assert.equal(secondsFor("google/veo-3.1", 8), 8); assert.equal(secondsFor("kwaivgi/kling-v3.0-pro", 8), 10); assert.equal(secondsFor("x/y", 7), 7);
+  console.log("garment_matches + video seconds: OK");
+}

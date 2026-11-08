@@ -50,6 +50,19 @@ const probe = async (f) => {
   return { width: j.streams?.[0]?.width, height: j.streams?.[0]?.height, duration: parseFloat(j.format?.duration) || 0 };
 };
 
+// Black letterbox bars (Veo pads a 4:5 still to 9:16): detect them so the composed ad is the picture only. -> "w:h:x:y" | null
+export async function detectBars(input, src) {
+  try {
+    const { stderr } = await run("ffmpeg", ["-v", "info", "-i", input, "-vf", "cropdetect=limit=24:round=2:reset=0", "-frames:v", "60", "-f", "null", "-"], { timeout: 30_000 });
+    const m = [...String(stderr).matchAll(/crop=(\d+):(\d+):(\d+):(\d+)/g)].at(-1);
+    if (!m) return null;
+    const [w, h, x, y] = m.slice(1).map(Number);
+    // only real bars: at least 4% of the frame cut, and the picture keeps most of its size
+    if (w * h >= src.width * src.height * 0.96 || w < src.width * 0.5 || h < src.height * 0.5) return null;
+    return { w, h, x, y };
+  } catch { return null; }
+}
+
 // -> { out, poster, width, height, duration, bytes, lines }
 export async function composeVideo({ input, out, poster, headline, position = "bottom", productImage = null, endSeconds = 1.3, width = 720, font = fontFile(), mono = fontFile(MONO_CANDIDATES) }) {
   if (!font) throw new Error("no headline font found");
@@ -57,7 +70,9 @@ export async function composeVideo({ input, out, poster, headline, position = "b
   if (!lines) throw new Error("headline doesn't fit in 2 lines");
   const src = await probe(input);
   if (!src.width || !src.height) throw new Error("input has no video stream");
-  const W = width, H = Math.round((W * src.height) / src.width / 2) * 2;
+  const bars = await detectBars(input, src);
+  const srcW = bars ? bars.w : src.width, srcH = bars ? bars.h : src.height;
+  const W = width, H = Math.round((W * srcH) / srcW / 2) * 2;
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "vcomp-"));
   const tf = path.join(tmp, "headline.txt"); fs.writeFileSync(tf, lines.join("\n"));
   const uf = path.join(tmp, "url.txt"); fs.writeFileSync(uf, STORE_HOST);
@@ -70,7 +85,7 @@ export async function composeVideo({ input, out, poster, headline, position = "b
   const urlSize = Math.round(W * 0.045);
   // main: scale, band, headline. end card: forest plate, (product), wordmark, URL. Then concat.
   const filter = [
-    `[0:v]scale=${W}:${H},setsar=1,fps=30,format=yuv420p,drawbox=x=0:y=${bandY}:w=${W}:h=${band}:color=${COLORS.forest}@0.96:t=fill,` +
+    `[0:v]${bars ? `crop=${bars.w}:${bars.h}:${bars.x}:${bars.y},` : ""}scale=${W}:${H},setsar=1,fps=30,format=yuv420p,drawbox=x=0:y=${bandY}:w=${W}:h=${band}:color=${COLORS.forest}@0.96:t=fill,` +
       `drawtext=fontfile='${esc(font)}':textfile='${esc(tf)}':fontcolor=${COLORS.bone}:fontsize=${fs1}:line_spacing=${Math.round(fs1 * 0.22)}:x=(w-text_w)/2:y=${bandY}+(${band}-text_h)/2[main]`,
     `color=c=${COLORS.forest}:s=${W}x${H}:r=30:d=${endSeconds},format=yuv420p[plate]`,
     `[1:v]scale=${logoW}:-1[logo]`,
@@ -86,5 +101,5 @@ export async function composeVideo({ input, out, poster, headline, position = "b
   await run("ffmpeg", ["-v", "error", "-y", "-ss", String(Math.min(1, dur / 2)), "-i", out, "-frames:v", "1", "-q:v", "3", poster], { timeout: 20_000 });
   const o = await probe(out);
   fs.rmSync(tmp, { recursive: true, force: true });
-  return { out, poster, width: o.width, height: o.height, duration: o.duration, bytes: fs.statSync(out).size, lines };
+  return { out, poster, width: o.width, height: o.height, duration: o.duration, bytes: fs.statSync(out).size, lines, cropped: bars };
 }

@@ -42,7 +42,7 @@ export function adImagePrompt({ product, scenario, photoStyle, prompt }) {
   return [
     `A PHOTOREALISTIC photograph (${photoStyle}). ${prompt}`,
     `Scenario: ${scenario}.`,
-    `A fictional person WEARS the ${product.garment || "garment"} "${product.name}" shown in the reference images: the garment is the clear centre and focus of the frame.`,
+    `A fictional person WEARS the ${product.color ? product.color + " " : ""}${product.garment === "tee" || !product.garment ? "t-shirt" : product.garment} "${product.name}" shown in the reference images (exactly that garment type and colour: no jacket, hoodie or layer over it): the garment is the clear centre and focus of the frame.`,
     `The garment's print must be EXACTLY the artwork in the first reference image (every line, symbol and letter, spelled exactly, legible, same proportions and colours), placed as in the mockups. Do not invent, drop or change any part of the print.`,
     SCENE_NO_TEXT,
   ].join("\n");
@@ -61,9 +61,9 @@ async function openaiEdit(key, model, prompt, files, withFidelity = true) {
   return j;
 }
 // -> { jpg (Buffer), model }
-export async function generateAdImage(openaiKey, prompt, files) {
+export async function generateAdImage(openaiKey, prompt, files, models = AD_IMAGE_MODELS()) {
   let last;
-  for (const model of AD_IMAGE_MODELS()) {
+  for (const model of models) {
     try {
       const j = await openaiEdit(openaiKey, model, prompt, files);
       const raw = Buffer.from(j.data[0].b64_json, "base64");

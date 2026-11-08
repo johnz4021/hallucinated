@@ -32,7 +32,7 @@ export async function storeCatalog(rootDir) {
     if (!prod?.active || !["live", "preorder"].includes(prod.metadata?.status)) continue;
     const images = (prod.images || []).filter(STORE_HOSTS);
     out.push({ slug: it.slug, name: prod.name, description: prod.description, status: prod.metadata.status === "live" ? "in stock" : "pre-order",
-      garment: prod.metadata.garment || null, design_id: prod.metadata.design_id || it.design_id || null, url: `${base}/p/${it.slug}`,
+      garment: prod.metadata.garment || null, color: prod.metadata.color || null, design_id: prod.metadata.design_id || it.design_id || null, url: `${base}/p/${it.slug}`,
       image: images[0] || null, images, print_url: it.print_url || null, by_agents: prod.metadata?.origin === "agents", product_id: it.product_id,
       price: priceText(c.amounts) });
   }

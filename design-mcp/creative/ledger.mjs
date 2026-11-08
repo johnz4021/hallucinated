@@ -46,6 +46,8 @@ export function creativeEvents(rootDir, since) {
   const l = loadAds(rootDir);
   for (const r of Object.values(l.reviews)) if (r.done_at && r.done_at > t && !!r.test === testMode())
     ev.push({ at: r.done_at, type: r.pass ? "ad_passed_review" : "ad_rejected_by_reviewer", by: "reviewer agent (vision)", concept: r.concept, kind: r.kind, reasons: r.reasons });
+  for (const c of Object.values(l.concepts || {})) if (c.at > t && !!c.test === testMode())
+    ev.push({ at: c.at, type: "ad_concepts", by: "Creative agent", considered: c.concepts.map((x) => x.punchline), picked: c.concepts[c.pick]?.punchline, why: c.pick_why });
   for (const a of Object.values(l.ads)) if (a.created_at > t && !!a.test === testMode())
     ev.push({ at: a.created_at, type: "ad_made", by: "Creative agent", kind: a.kind, concept: a.concept, caption: a.caption, event: a.event });
   return ev.sort((a, b) => a.at.localeCompare(b.at));
@@ -75,4 +77,26 @@ export function pickFeature(catalog, l) {
   for (const a of Object.values(l.ads || {})) if (!!a.test === testMode() && a.state !== "withdrawn") for (const s of a.featured_products || []) if (!last[s] || a.created_at > last[s]) last[s] = a.created_at;
   const pool = [...(catalog || [])].sort((a, b) => String(last[a.slug] || "").localeCompare(String(last[b.slug] || "")) || String(a.slug).localeCompare(b.slug));
   return pool.length ? { product: pool[0], why: "catalog rotation (least recently featured)" } : null;
+}
+
+// ---- phase 9: concepting. Each run writes 5 concepts and picks one; all are logged (for /hq and agents_log). ----
+// Pure: validate a concept set -> null or the reason
+export function conceptsCheck(concepts, pick, feature) {
+  if (!Array.isArray(concepts) || concepts.length !== 5) return "write exactly 5 concepts";
+  for (const [i, c] of concepts.entries()) {
+    if (!c.situation || c.situation.length < 30) return `concept ${i + 1}: describe the situation (a photoreal scene with our garment worn) in a full sentence`;
+    if (!c.punchline) return `concept ${i + 1}: needs a punchline`;
+    if (!(c.scroll_stop >= 1 && c.scroll_stop <= 10)) return `concept ${i + 1}: scroll_stop must be 1-10`;
+    if (!c.why) return `concept ${i + 1}: one line on why it stops the scroll`;
+  }
+  // five DIFFERENT situations (Sat 19:33: all five were the same fog overlook)
+  const words = (t) => new Set(String(t).toLowerCase().match(/[a-z]{4,}/g) || []);
+  for (let i = 0; i < 5; i++) for (let j = i + 1; j < 5; j++) {
+    const a = words(concepts[i].situation), b = words(concepts[j].situation);
+    const inter = [...a].filter((w) => b.has(w)).length, sim = inter / Math.max(1, Math.min(a.size, b.size));
+    if (sim > 0.6) return `concepts ${i + 1} and ${j + 1} are the same situation; write 5 different places / moments`;
+  }
+  if (!(pick >= 0 && pick < 5)) return "pick must be 0-4 (the index of the best concept)";
+  if (feature && concepts[pick].featured_slug !== feature) return `the picked concept must feature ${feature} (next_ad_format's feature)`;
+  return null;
 }
