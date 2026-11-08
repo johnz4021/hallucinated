@@ -8,10 +8,10 @@
 export const ROTATION = ["agents_log", "spotlight", "reply_bait", "joke"];
 export const PILLARS = ["new_design", "ad", ...ROTATION];
 
-// new_design first, then a queued ad (Creative's reviewed ads), then the rotation
+// ads first (John, Sat 17:40: "focus everything on growth ads"), then new_design, then the rotation
 export function nextPillar({ lastRotation, hasNewDesign, hasAd, agentsLogNew, spotlightAvailable }) {
-  if (hasNewDesign) return "new_design";
   if (hasAd) return "ad";
+  if (hasNewDesign) return "new_design";
   const can = { agents_log: !!agentsLogNew, spotlight: !!spotlightAvailable, reply_bait: true, joke: true };
   const start = ROTATION.indexOf(lastRotation) + 1;   // -1 + 1 = 0 when nothing has run yet
   for (let i = 0; i < ROTATION.length; i++) { const p = ROTATION[(start + i) % ROTATION.length]; if (can[p]) return p; }

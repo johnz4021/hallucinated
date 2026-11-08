@@ -13,6 +13,7 @@
 [ -f ~/.zshrc ] && source ~/.zshrc
 cd "$(dirname "$0")/design-mcp" || exit 1
 export STRIPE_LIVE_OK=1   # store is live (Sat 14:25): agents read STRIPE_LIVE_SECRET_KEY; unset to use the sandbox test key
-export DESIGN_MAX_PROPOSALS_PER_DAY=6 DESIGN_MAX_PUBLISHES_PER_DAY=6   # John Sat 16:25: more variety on the store
+export DESIGN_MAX_PROPOSALS_PER_DAY=6 DESIGN_MAX_PUBLISHES_PER_DAY=6
+export ADS_MAX_IMAGES_PER_DAY=10 ADS_MAX_VIDEOS_PER_DAY=5   # John Sat 17:40: focus Growth on ads   # John Sat 16:25: more variety on the store
 pkill -f "agents/serve.mjs" 2>/dev/null; sleep 1
 node agents/serve.mjs
