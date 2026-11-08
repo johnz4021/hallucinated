@@ -43,12 +43,16 @@ const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "p8-"));
 const src = path.join(tmp, "src.mp4");
 execFileSync("ffmpeg", ["-v", "error", "-y", "-f", "lavfi", "-i", "testsrc2=s=1080x1920:r=24:d=5", "-c:v", "libx264", "-pix_fmt", "yuv420p", src]);
 const r = await composeVideo({ input: src, out: path.join(tmp, "out.mp4"), poster: path.join(tmp, "out.jpg"), headline: "Your agent shipped to prod on Friday", position: "top" });
-assert.equal(r.width, 720); assert.equal(r.height, 1280);
+assert.equal(r.width, 1080); assert.equal(r.height, 1620);   // 2:3 default (John, Sat 20:40)
 assert.ok(Math.abs(r.duration - 6.3) < 0.15, `duration ${r.duration}`);
 assert.ok(r.bytes > 50_000 && r.bytes < 15_000_000);
 assert.ok(fs.statSync(r.poster).size > 5_000);
 const codec = execFileSync("ffprobe", ["-v", "error", "-select_streams", "v:0", "-show_entries", "stream=codec_name,pix_fmt", "-of", "csv=p=0", r.out]).toString().trim();
 assert.equal(codec, "h264,yuv420p");
+assert.equal(r.position, "top"); assert.ok(r.band_pct <= 0.14, `band ${r.band_pct}`);
+{ const { bandLayout } = await import("./video_compose.mjs");
+  const one = bandLayout("Nobody is driving.", 1080, 1620); assert.equal(one.lines.length, 1); assert.ok(one.band <= 1620 * 0.14);
+  const two = bandLayout("Your agent shipped to prod on Friday again", 1080, 1620); assert.ok(two.lines.length <= 2 && two.band <= 1620 * 0.14 && two.fontSize >= 1080 * 0.035, JSON.stringify(two)); }
 console.log(`composer: OK (${r.width}x${r.height}, ${r.duration.toFixed(2)} s, ${Math.round(r.bytes / 1024)} KB)`);
 
 // the reviewer brief for a composed video names the headline, the end card and "no other text"

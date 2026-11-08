@@ -63,29 +63,54 @@ export async function detectBars(input, src) {
   } catch { return null; }
 }
 
-// -> { out, poster, width, height, duration, bytes, lines }
-export async function composeVideo({ input, out, poster, headline, position = "bottom", productImage = null, endSeconds = 1.3, width = 720, font = fontFile(), mono = fontFile(MONO_CANDIDATES) }) {
+// Pure: the headline band for a W x H frame: one line if it fits at a readable size, else two; band <= 14% of H.
+export const BAND_MAX = 0.14;
+export function bandLayout(headline, W, H) {
+  const text = String(headline || "").replace(/\s+/g, " ").trim();
+  const fit = (lines) => {
+    const longest = Math.max(...lines.map((l) => l.length));
+    let f = Math.min(W * 0.075, (W * 0.9) / (0.68 * longest));            // width limit (Arial Black is wide)
+    f = Math.min(f, (H * BAND_MAX) / (lines.length * 1.25 + 0.7));       // height limit: the band stays within 14%
+    return { lines, fontSize: Math.round(f), band: Math.round(f * lines.length * 1.25 + f * 0.7) };
+  };
+  const one = fit([text]);
+  if (one.fontSize >= W * 0.042) return one;                              // readable as one line
+  const two = wrapHeadline(text, Math.ceil(text.length / 2) + 3) || wrapHeadline(text);
+  return fit(two || [text]);
+}
+
+// Output frame (John, Sat 20:40: video ads in 2:3, 1080x1620). ADS_VIDEO_ASPECT = "2:3" (default) | "9:16" (1080x1920).
+export function outputSize(aspect = process.env.ADS_VIDEO_ASPECT || "2:3") {
+  const [a, b] = String(aspect).split(":").map(Number);
+  if (!(a > 0 && b > 0)) return { W: 1080, H: 1620, aspect: "2:3" };
+  return { W: 1080, H: Math.round((1080 * b) / a / 2) * 2, aspect: `${a}:${b}` };
+}
+
+// -> { out, poster, width, height, duration, bytes, lines, cropped }
+export async function composeVideo({ input, out, poster, headline, position = "bottom", productImage = null, endSeconds = 1.3, aspect, font = fontFile(), mono = fontFile(MONO_CANDIDATES) }) {
   if (!font) throw new Error("no headline font found");
-  const lines = wrapHeadline(headline);
-  if (!lines) throw new Error("headline doesn't fit in 2 lines");
+  if (!wrapHeadline(headline)) throw new Error("headline doesn't fit in 2 lines");
   const src = await probe(input);
   if (!src.width || !src.height) throw new Error("input has no video stream");
   const bars = await detectBars(input, src);
-  const srcW = bars ? bars.w : src.width, srcH = bars ? bars.h : src.height;
-  const W = width, H = Math.round((W * srcH) / srcW / 2) * 2;
+  // fill the output frame: scale up to cover, then crop centred (horizontally centred; vertically a touch above centre, where
+  // faces and chest prints sit). No letterbox.
+  const { W, H } = outputSize(aspect);
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "vcomp-"));
-  const tf = path.join(tmp, "headline.txt"); fs.writeFileSync(tf, lines.join("\n"));
+  const tf = path.join(tmp, "headline.txt");
   const uf = path.join(tmp, "url.txt"); fs.writeFileSync(uf, STORE_HOST);
-  const fs1 = Math.round(Math.min(W * 0.085, (W * 0.88) / (0.68 * Math.max(...lines.map((l) => l.length)))));   // Arial Black is wide
-  const band = Math.round(fs1 * lines.length * 1.25 + fs1 * 0.9);
-  const bandY = position === "top" ? Math.round(H * 0.06) : H - band - Math.round(H * 0.07);
+  // The band is ALWAYS at the top (lead, Sat 20:50: a bottom band covered the shirt print, and the shirt is the point of the
+  // ad), at most 14% of the frame height, semi-opaque. One line if it fits at a readable size, else two.
+  const { lines, fontSize: fs1, band } = bandLayout(headline, W, H);
+  const bandY = Math.round(H * 0.035);
+  fs.writeFileSync(tf, lines.join("\n"));
   const esc = (p) => p.replace(/\\/g, "/").replace(/:/g, "\\:").replace(/'/g, "\\'");
   const dur = Math.max(1, src.duration || 5);
   const logoW = Math.round(W * 0.78), prodW = Math.round(W * 0.62);
   const urlSize = Math.round(W * 0.045);
   // main: scale, band, headline. end card: forest plate, (product), wordmark, URL. Then concat.
   const filter = [
-    `[0:v]${bars ? `crop=${bars.w}:${bars.h}:${bars.x}:${bars.y},` : ""}scale=${W}:${H},setsar=1,fps=30,format=yuv420p,drawbox=x=0:y=${bandY}:w=${W}:h=${band}:color=${COLORS.forest}@0.96:t=fill,` +
+    `[0:v]${bars ? `crop=${bars.w}:${bars.h}:${bars.x}:${bars.y},` : ""}scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H}:(iw-${W})/2:(ih-${H})*0.45,setsar=1,fps=30,format=yuv420p,drawbox=x=0:y=${bandY}:w=${W}:h=${band}:color=${COLORS.forest}@0.85:t=fill,` +
       `drawtext=fontfile='${esc(font)}':textfile='${esc(tf)}':fontcolor=${COLORS.bone}:fontsize=${fs1}:line_spacing=${Math.round(fs1 * 0.22)}:x=(w-text_w)/2:y=${bandY}+(${band}-text_h)/2[main]`,
     `color=c=${COLORS.forest}:s=${W}x${H}:r=30:d=${endSeconds},format=yuv420p[plate]`,
     `[1:v]scale=${logoW}:-1[logo]`,
@@ -97,9 +122,9 @@ export async function composeVideo({ input, out, poster, headline, position = "b
     ...(productImage ? ["-loop", "1", "-t", String(endSeconds), "-i", productImage] : []),
     "-filter_complex", filter, "-map", "[v]", "-t", String(dur + endSeconds), "-c:v", "libx264", "-preset", "veryfast", "-crf", "21", "-profile:v", "high", "-pix_fmt", "yuv420p",
     "-movflags", "+faststart", "-an", out];
-  await run("ffmpeg", args, { timeout: 60_000 });
+  await run("ffmpeg", args, { timeout: 80_000 });
   await run("ffmpeg", ["-v", "error", "-y", "-ss", String(Math.min(1, dur / 2)), "-i", out, "-frames:v", "1", "-q:v", "3", poster], { timeout: 20_000 });
   const o = await probe(out);
   fs.rmSync(tmp, { recursive: true, force: true });
-  return { out, poster, width: o.width, height: o.height, duration: o.duration, bytes: fs.statSync(out).size, lines, cropped: bars };
+  return { out, poster, width: o.width, height: o.height, duration: o.duration, bytes: fs.statSync(out).size, lines, band, band_pct: Number((band / H).toFixed(3)), position: "top", cropped: bars };
 }

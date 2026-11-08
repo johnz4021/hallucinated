@@ -90,7 +90,7 @@ Check, and be strict:
 7. tragedy: true if it mocks a real tragedy, disaster, death or its victims.
 8. quality: would a sharp tech-Twitter streetwear account post this (composition, no AI artifacts like warped hands or melted fabric)?
 9. quality_score: 1-10, would this stop the scroll on X: composition, realism, how clearly the joke reads, how good the shirt looks (7 = good enough to post, 9+ = people screenshot it). Add score_notes: one line on what would raise it.${composite ? `
-10. reveal_print_legible: in the clip frames, at least one frame (the reveal) shows the shirt print clearly, legible and matching the reference; false if no frame does.` : ""}
+10. reveal_print_legible: judge the frames exactly as composed (with the headline band on them): at least one frame (the reveal) shows the shirt print clearly, legible, NOT covered by the band, and matching the reference; false if no frame does or the band hides the print.` : ""}
 Comedy can be edgy and dark; that's allowed. Only the hard lines above and accuracy decide.
 End with exactly one line: RESULT: {"pass":true|false,"photorealistic":true|false,"garment_worn_centre":true|false,"garment_matches":true|false,"no_third_party_branding":true|false,"print_matches":true|false|null,"no_extra_text":true|false,"product_accurate":true|false|null,"text_legible":true|false|null,"real_person":true|false,"real_names":true|false,"other_logos":true|false,"slurs_or_protected_group":true|false,"tragedy":true|false,"quality":"good|ok|bad","quality_score":<1-10>,"score_notes":"<one line>",${composite ? '"reveal_print_legible":true|false,' : ""}"reasons":"<one or two sentences>"}`;
 }
@@ -406,7 +406,7 @@ export function registerCreativeTools(server, ctx) {
     description: "Image-to-video: animates one of your generated images (its fil_ id; make it a TEXT-FREE visual gag) into a 6-8 s clip with Veo 3.1 (default; ADS_VIDEO_MODEL overrides; falls back to Veo 3.1 Fast, Kling v3 Pro, Seedance 2.5). A 3-beat structure (setup, reveal of the print, beat) is appended. A no-text rule is appended to your prompt (video models garble letters): the headline is added afterwards by ad_video_compose. Daily video cap enforced here. Takes a few minutes: poll ad_video_status with the job_id.",
     inputSchema: { image_file_id: z.string().regex(/^fil_[a-z0-9]+$/), prompt: z.string().min(10).max(1500), model: z.enum(VIDEO_MODELS).optional(),
       aspect_ratio: z.enum(["9:16", "4:5", "1:1", "16:9"]).optional(), seconds: z.number().int().min(4).max(10).optional() },
-  }, async ({ image_file_id, prompt, model, aspect_ratio = "9:16", seconds = 8 }) => {
+  }, async ({ image_file_id, prompt, model, aspect_ratio = "9:16", seconds = 8 }) => {   // 9:16 = the closest aspect Veo/Kling take to our 2:3 stills; ad_video_compose crops any padding and fills 2:3
     try {
       const l = loadAds(ctx.rootDir);
       if (!Object.values(l.reviews).some((r) => r.file_id === image_file_id && r.kind === "image" && r.pass && !!r.test === testMode()))
@@ -451,7 +451,7 @@ export function registerCreativeTools(server, ctx) {
   server.registerTool("ad_video_compose", {
     title: "Burn the headline into a video ad and add the end card",
     description: "Takes a finished clip from ad_video_status (its fil_ id) and makes the final ad: your headline (1-8 words, plain ASCII, no links or hashtags) set in our type on a forest band at the top or bottom, then a 1.3 s end card with the Hallucinated wordmark, the featured product's mockup (if featured_slug) and hallucinated-store.vercel.app. H.264 MP4 within X's limits. Returns the NEW file_id: send THAT to ad_review (kind video, text_in_image = the headline) and ad_submit.",
-    inputSchema: { video_file_id: z.string().regex(/^fil_[a-z0-9]+$/), headline: z.string().min(1).max(60), position: z.enum(["top", "bottom"]).optional(),
+    inputSchema: { video_file_id: z.string().regex(/^fil_[a-z0-9]+$/), headline: z.string().min(1).max(60), position: z.enum(["top", "bottom"]).optional().describe("ignored for now: the band is always at the top so it never covers the shirt print"),
       featured_slug: z.string().max(80).optional().describe("the product to show on the end card (use the feature next_ad_format gave you)") },
   }, async ({ video_file_id, headline, position = "bottom", featured_slug }) => {
     try {
