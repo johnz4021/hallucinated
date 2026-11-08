@@ -154,7 +154,8 @@ export function registerCreativeTools(server, ctx) {
       const bySlug = Object.fromEntries(catalog.map((p) => [p.slug, { slug: p.slug, name: p.name, status: p.status, orders_qty: 0, orders_usd: 0, preorders_qty: 0, preorders_usd: 0 }]));
       const slugOf = (r) => r.slug || catalog.find((p) => p.design_id && p.design_id === r.design_id && (p.garment || "tee") === (r.garment || "tee"))?.slug || "unknown";
       for (const r of await fetchOrders(sc, ctx.rootDir, { since, drop: "all", unbatchedOnly: false })) {
-        const s = slugOf(r); (bySlug[s] ||= { slug: s, name: s, orders_qty: 0, orders_usd: 0, preorders_qty: 0, preorders_usd: 0 }).orders_qty += r.quantity;
+        const s = slugOf(r), b = (bySlug[s] ||= { slug: s, name: s, orders_qty: 0, orders_usd: 0, preorders_qty: 0, preorders_usd: 0 });
+        b.orders_qty += r.quantity; b.orders_usd += r.line_usd || 0;   // was never summed: the CEO saw "$0 revenue" for a paid $65 order
       }
       for (const p of (await listPreorders(sc, {})).filter((x) => x.created_at >= since)) for (const i of p.items) {
         const s = catalog.find((c) => c.product_id === i.product_id)?.slug || i.product || "unknown";
@@ -162,7 +163,10 @@ export function registerCreativeTools(server, ctx) {
         b.preorders_qty += i.qty; b.preorders_usd += ((i.unit_amount || 0) * i.qty) / 100;
       }
       const list = Object.values(bySlug).sort((a, b) => b.orders_qty + b.preorders_qty - (a.orders_qty + a.preorders_qty));
-      return txt({ mode: sc.mode, days, products: list, totals: { orders_qty: list.reduce((n, x) => n + x.orders_qty, 0), preorders_qty: list.reduce((n, x) => n + x.preorders_qty, 0) } });
+      for (const x of list) { x.orders_usd = Math.round(x.orders_usd * 100) / 100; x.preorders_usd = Math.round(x.preorders_usd * 100) / 100; }
+      const sum = (k) => Math.round(list.reduce((n, x) => n + x[k], 0) * 100) / 100;
+      return txt({ mode: sc.mode, days, products: list, totals: { orders_qty: sum("orders_qty"), orders_usd: sum("orders_usd"), preorders_qty: sum("preorders_qty"), preorders_usd: sum("preorders_usd"), revenue_paid_usd: sum("orders_usd") },
+        note: "orders = paid now; pre-orders = cards saved, charged at launch (not revenue yet)" });
     } catch (e) { return err("store_stats failed: " + e.message); }
   });
 

@@ -31,6 +31,26 @@ export const ALL_MCP_TOOLS = [
 // Never confirmed by code, whatever an agent's config says: a human decides each call in Naïve Studio.
 export const NEVER_AUTO = new Set(["customania_handoff_payment", "courier_book", "x_ads_activate", "issue_card", "charge_preorders"].map((n) => `${MCP}.${n}`));
 
+// EVERY Naïve built-in and platform tool (SDK 0.11.0: BUILTIN_TOOLS + PLATFORM_TOOLS + TRADING_WRITE_TOOLS). Like unnamed
+// hallucinated.* tools, an unnamed built-in defaults to enabled, and some park on an approval card nobody expects (Product's
+// board_write sat as "WAITING FOR JOHN"). So all of them are OFF on every agent, except the ones an agent's def turns on in
+// `builtins` (Creative's generate_image, the reviewer's view_image). A newer SDK may add names: re-extract this list then.
+export const ALL_BUILTINS = [
+  "bash", "read", "write", "edit", "ls", "find", "browser", "mobile", "read_skill", "publish_file", "web_search", "web_fetch",
+  "generate_image", "generate_video", "clip_video", "build_media_skill", "list_as_template", "pay_out_earnings", "generate_3d_model",
+  "build_3d", "create_character", "get_character", "list_characters", "update_character", "delete_character", "apps", "send_to_agent",
+  "wait_for_agents", "list_agents", "post_to_channel", "board_read", "board_write", "ask_operator", "request_tools", "project_context",
+  "transcribe_audio", "generate_speech", "generate_sound_effect", "generate_music", "find_files", "view_image", "fetch_file",
+  "find_stock_photo", "data_search", "data_describe", "data_run", "session_spend", "show", "open_panel", "compose", "write_plan",
+  "propose_plan", "email.inboxes", "email.read", "email.send", "phone.numbers", "phone.read", "phone.send", "crm.read", "crm.write",
+  "social.accounts", "social.post", "social.status", "social.post_metrics", "connections.search", "connections.connect",
+  "connections.status", "legal.verifications", "legal.verification", "legal.companies", "legal.company", "legal.documents", "legal.naics",
+  "legal.verify", "legal.resend_link", "legal.form", "legal.submit", "wallet.balance", "wallet.transactions", "wallet.receipts",
+  "wallet.quote", "wallet.pay", "wallet.transfer", "card.list", "card.show", "card.quote", "card.transactions", "card.spend", "card.issue",
+  "card.credentials", "card.cancel", "company.set_timezone", "company.set_logo", "company.set_brand", "apps.request_access", "payments",
+  "payments_request", "vault.request_secret", "operator.request", "trading.account", "trading.positions", "trading.orders",
+  "trading.quote", "trading.place_order", "trading.cancel_order", "trading.close_position",
+];
 // Built-ins off on every agent. GLM-5.2 is text-only: anything returning an image crashes the session.
 // social.post: X refuses Naïve's posting (we post through our own x_post). The rest spend money, act in public,
 // or start a paid sandbox computer, and none of our agents need them.
@@ -192,7 +212,7 @@ End with: RESULT: {"batched":true|false,"batch_ref":"<or null>","sizes":{...},"t
 // Apply a def's tools on top of an agent's current tool config.
 export function applyTools(tools, def, allMcp = ALL_MCP_TOOLS) {
   let t = tools;
-  for (const n of DISABLED_BUILTINS) { try { t = withTool(t, n, { enabled: false }); } catch {} }
+  for (const n of new Set([...ALL_BUILTINS, ...DISABLED_BUILTINS])) if (!def.builtins?.[n]) { try { t = withTool(t, n, { enabled: false }); } catch {} }
   for (const [n, cfg] of Object.entries(def.builtins || {})) t = withTool(t, n, cfg);   // e.g. Creative's generate_image, the reviewer's view_image
   for (const n of new Set([...ALL_MCP_TOOLS, ...allMcp])) {
     const p = def.tools[n];

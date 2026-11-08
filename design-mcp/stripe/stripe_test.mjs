@@ -43,6 +43,9 @@ assert.equal(r("cs_b").quantity, 2); assert.equal(r("cs_b").size, "L"); assert.e
 assert.equal(r("cs_cart", 0).size, "S"); assert.equal(r("cs_cart", 0).quantity, 2); assert.equal(r("cs_cart", 1).size, "2XL"); assert.equal(r("cs_cart", 0).garment, "tee"); assert.equal(r("cs_cart", 0).color, "black");
 assert.equal(r("cs_nosize").size, null);
 assert.equal(r("cs_a").amount_total, "65.00 USD"); assert.equal(r("cs_a").email, "cs_a@x.test");
+assert.equal(r("cs_a").line_usd, 65);                          // one line, no line amount: the session total (store_stats revenue)
+assert.equal(r("cs_cart", 0).line_usd, null);                 // several lines without amounts: unknown, never the session total
+assert.equal(parseOrders([S("cs_amt", { metadata: {} })], { cs_amt: [{ ...P({ ...TEE, size: "M" }, 2), amount_total: 13000 }] })[0].line_usd, 130);
 const all = parseOrders(sessions, li, { ledger, unbatchedOnly: false });
 assert.equal(all.find((x) => x.stripe_session_id === "cs_batched").batched_into, "batch-1");
 assert.equal(all.find((x) => x.stripe_session_id === "cs_sess_batched").batched_into, "batch-2");

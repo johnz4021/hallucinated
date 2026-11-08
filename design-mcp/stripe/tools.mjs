@@ -82,6 +82,8 @@ export function parseOrders(sessions, lineItems, { drop = "drop-1", unbatchedOnl
         size: normSize(pm.size || prod.size || (legacy ? s.metadata?.size : null)),
         size_raw: pm.size || prod.size || (legacy ? s.metadata?.size : null) || null,
         quantity: li.quantity || 0,
+        // this line's own amount (Stripe line_items.amount_total, cents); a one-line session falls back to the session total
+        line_usd: li.amount_total != null ? li.amount_total / 100 : items.length === 1 && s.amount_total != null ? s.amount_total / 100 : null,
         drop: pm.drop || prod.drop || s.metadata?.drop || null,
         description: li.description || null,
       };
