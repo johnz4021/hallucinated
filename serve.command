@@ -6,7 +6,7 @@
 #   X_DRY_RUN=1            posting tools log what they'd post and return fake ids (nothing reaches X)
 #   MAIL_DRY_RUN=1         inbox_reply / preorder_send_payment_link log instead of sending
 #   HOLDS_STRICT_PUBLIC=1  leave Naïve's "read people's data" holds on posts/replies/customer email for John
-#   SALES_MIN_QTY=3        shirts before the hourly Ops loop batches (or SALES_MAX_WAIT_H=24 hours since the oldest sale)
+#   SALES_MIN_QTY=1        shirts before the daily 9:00 Ops supplier order batches (default 1: everything paid goes out daily)
 #   DESIGN_MAX_PROPOSALS_PER_DAY=2, DESIGN_MAX_PUBLISHES_PER_DAY=2 (agent designs, per Stripe mode, Pacific day)
 #   X_MAX_POSTS_PER_DAY=12 (Growth every 1.5 h), X_MIN_GAP_MIN=45, HANDOFF_TIMEOUT_MIN=15
 #   (store link in at most 1 of every 3 original posts, new-design announcements exempt: enforced in x_post, not an env)
@@ -17,5 +17,6 @@ export DESIGN_MAX_PROPOSALS_PER_DAY=24 DESIGN_MAX_PUBLISHES_PER_DAY=24   # John 
 export ADS_MAX_IMAGES_PER_DAY=10 ADS_MAX_VIDEOS_PER_DAY=5   # John Sat 17:40: focus Growth on ads
 export X_BROWSER_START_HOUR=0 X_BROWSER_END_HOUR=24   # John Sat 17:47: no time-of-day window for browser replies
 export X_BROWSER_MIN_GAP_MIN=25 X_BROWSER_MAX_PER_DAY=48   # John Sat 19:05: 2 browser replies per hour
+export X_MAX_POSTS_PER_DAY=1000 X_LINK_WINDOW=1   # John Sat 23:45: no daily post cap, store link allowed on every post (45-min gap kept)
 pkill -f "agents/serve.mjs" 2>/dev/null; sleep 1
 node agents/serve.mjs
