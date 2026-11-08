@@ -57,6 +57,8 @@ export type Campaign = {
   event: boolean;
   sources: { label: string; url: string }[];
   featured_products: string[];
+  /** Optional: the X post that ran this ad. */
+  x_url?: string;
   created_at: string;
   test: boolean;
   active?: boolean;
@@ -100,6 +102,7 @@ export function validateItem(collection: Collection, item: Record<string, unknow
     if (item.event && (item.sources as unknown[]).length < 1) return "event ads need at least one source";
     if (!Array.isArray(item.featured_products) || item.featured_products.length > 4 ||
       !(item.featured_products as unknown[]).every((x) => typeof x === "string" && /^[a-z0-9-]{1,80}$/.test(x))) return "featured_products: up to 4 product slugs";
+    if (item.x_url !== undefined && !(typeof item.x_url === "string" && /^https:\/\/(x|twitter)\.com\/[^\s]+$/.test(item.x_url) && item.x_url.length <= 300)) return "x_url must be an https://x.com/... link";
     if (!isIso(item.created_at)) return "created_at must be an ISO time";
     if (typeof item.test !== "boolean") return "test must be true or false";
     if (item.active !== undefined && typeof item.active !== "boolean") return "active must be true or false";

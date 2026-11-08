@@ -69,7 +69,9 @@ function useNow(stepMs = 1000) {
   return now;
 }
 
-export default function HqBoard({ initial, initialSource }: { initial: Hq; initialSource: string }) {
+export type HqAd = { id: string; caption: string; image: string | null; kind: "image" | "video"; x_url: string | null };
+
+export default function HqBoard({ initial, initialSource, ads = [] }: { initial: Hq; initialSource: string; ads?: HqAd[] }) {
   const [hq, setHq] = useState<Hq>(initial);
   const [source, setSource] = useState(initialSource);
   const [fetchedAt, setFetchedAt] = useState(() => Date.now());
@@ -199,6 +201,27 @@ export default function HqBoard({ initial, initialSource }: { initial: Hq; initi
                   On <strong>{d.title ?? d.design_id}</strong>
                   {d.stages?.ceo?.at ? `, ${clock(d.stages.ceo.at)}` : ""}
                 </p>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {ads.length > 0 && (
+        <section className="hq-ads" aria-labelledby="ads-title">
+          <div className="hq-ads-head">
+            <h2 id="ads-title">Ads the agents made</h2>
+            <Link href="/campaigns">See all the ads</Link>
+          </div>
+          <ul>
+            {ads.map((a) => (
+              <li key={a.id}>
+                <a href={a.x_url ?? "/campaigns"} className="hq-ad">
+                  <span className="hq-ad-img">
+                    {a.image ? <img src={a.image} alt="" loading="lazy" /> : <span>Video</span>}
+                  </span>
+                  <span className="hq-ad-caption">{a.caption}</span>
+                </a>
               </li>
             ))}
           </ul>

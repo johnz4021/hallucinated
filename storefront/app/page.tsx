@@ -4,23 +4,35 @@ import DropAlerts from "@/components/DropAlerts";
 import Hero from "@/components/Hero";
 import ProductCard from "@/components/ProductCard";
 import { getCatalog, isAgentDesign } from "@/lib/catalog";
-import { config, formatPrice } from "@/lib/config";
+import { config } from "@/lib/config";
 import { activeSorted, getContent, visibleCampaigns } from "@/lib/content";
+import { localImage } from "@/lib/config";
 import type { Banner } from "@/lib/content-schema";
 
 export const revalidate = 60;
 
-const LOG = [
-  { who: "product", did: "designed the back: > git reset --hard over a line-art map of SF (design bc1dbe9d9aae), then ran it through its own print check until it passed" },
-  { who: "ceo", did: "approved it, in writing, with reasons" },
-  { who: "ops", did: "uploaded the front and back to a print shop on 20th Ave, placed them to the inch and checked out four black tees" },
-  { who: "a human", did: "paid. The agents don't get a card yet." },
+// The generic pipeline every piece goes through. Live proof is on /hq.
+const PIPELINE = [
+  { who: "trend", did: "The product agent reads what SF tech is arguing about this week." },
+  { who: "product", did: "It designs a two-sided tee: our wordmark on the front, the joke on the back, then checks its own print file." },
+  { who: "ceo", did: "The CEO agent approves it or kills it, and writes down why." },
+  { who: "store", did: "Approved designs go up here, usually as pre-orders: you're charged only if one launches." },
+  { who: "growth", did: "The growth agent makes the ads and posts them on X." },
+  { who: "ops", did: "Paid orders are batched into a print run; a human pays the print shop and approves the courier." },
 ];
+// Hero headlines: no trailing hashtags, at most ~70 chars cut at a word. Full captions live on /campaigns.
+function heroCaption(caption: string, max = 70) {
+  const clean = caption.replace(/(\s+#[\w-]+)+\s*$/u, "").trim();
+  if (clean.length <= max) return clean;
+  const cut = clean.slice(0, max + 1);
+  const at = cut.lastIndexOf(" ");
+  return `${(at > 30 ? cut.slice(0, at) : clean.slice(0, max)).replace(/[\s,.;:—–-]+$/u, "")}…`;
+}
 
 export default async function Home() {
   const [catalog, content] = await Promise.all([getCatalog(), getContent()]);
   const live = new Set(catalog.map((p) => p.slug));
-  // Newest 1-3 campaign images join the rotation after the curated banners (test ones only off production).
+  // Hero: the newest 1-3 agent ads first, then the curated banners (test ads only off production).
   const adSlides: Banner[] = visibleCampaigns(content)
     .filter((c) => c.kind === "image")
     .slice(0, 3)
@@ -28,7 +40,7 @@ export default async function Home() {
       const slug = c.featured_products.find((s) => live.has(s));
       return {
         id: `ad-${c.id}`,
-        title: c.caption,
+        title: heroCaption(c.caption),
         image: c.media_url,
         image_alt: `Ad by the agents: ${c.caption}`,
         cta_label: slug ? "Shop the shirt" : "See all the ads",
@@ -38,71 +50,43 @@ export default async function Home() {
         kicker: c.test ? "Ad by the agents (test)" : "Ad by the agents",
       };
     });
-  const banners = [...activeSorted(content.banners).slice(0, 3), ...adSlides];
+  const banners = [...adSlides, ...activeSorted(content.banners).slice(0, 3)];
   const lookbook = activeSorted(content.lookbook);
-  const featured = catalog.find((p) => p.status === "live") ?? catalog[0];
-  const featuredDrop = content.drops.find((d) => d.id === featured?.drop);
-  const preorders = catalog.filter((p) => p.status === "preorder" && !isAgentDesign(p) && p.drop === "drop-2");
-  const fresh = catalog.filter(isAgentDesign).sort((a, b) => b.created - a.created).slice(0, 6);
+  const latest = [...catalog].sort((a, b) => b.created - a.created).slice(0, 6);
+  const agentCount = catalog.filter(isAgentDesign).length;
+  // Newest CEO verdict on a design that is actually in this deployment's catalog.
+  const verdict = (content.designs ?? [])
+    .filter((d) => live.has(d.slug) && d.ceo?.reason)
+    .sort((a, b) => Date.parse(b.ceo.at) - Date.parse(a.ceo.at))[0];
+  const verdictProduct = verdict ? catalog.find((p) => p.slug === verdict.slug) : undefined;
   const cats = config.categories
-    .map((c) => ({ ...c, items: catalog.filter((p) => p.category === c.slug) }))
+    .map((c) => ({ ...c, items: catalog.filter((p) => p.category === c.slug).sort((a, b) => b.created - a.created) }))
     .filter((c) => c.items.length);
 
   return (
     <>
       <Hero banners={banners} />
 
-      {featured && (
-        <section className="feature wrap" aria-labelledby="feature-title">
-          <div className="feature-img">
-            {(lookbook[0]?.image ?? featured.images[2] ?? featured.images[0]) && (
-              <Image src={lookbook[0]?.image ?? featured.images[0]} alt={lookbook[0]?.alt ?? featured.name} fill sizes="(max-width: 900px) 100vw, 50vw" />
-            )}
+      <section className="wrap section latest" aria-labelledby="latest-title">
+        <div className="section-head">
+          <div>
+            <h2 id="latest-title">This week from the agents</h2>
+            <p className="section-note">
+              The newest pieces across every drop. {agentCount > 0 ? `${agentCount} of the designs in the shop came straight from the agents.` : ""}
+            </p>
           </div>
-          <div className="feature-copy">
-            <p className="kicker">{featuredDrop ? `Drop ${featuredDrop.n}, out now` : "Out now"}</p>
-            <h2 id="feature-title" className="mono-title">
-              <span className="prompt" aria-hidden="true">&gt;</span> <span className="nw">git reset</span> <span className="nw">--hard</span>
-            </h2>
-            <p className="feature-pitch">{featured.description}</p>
-            <p className="feature-price">{featured.priceFrom != null && formatPrice(featured.priceFrom)}</p>
-            <div className="feature-actions">
-              <Link href={`/p/${featured.slug}`} className="btn">Shop the tee</Link>
-              {featuredDrop && <Link href={`/drops/${featuredDrop.n}`} className="btn-quiet">See drop {featuredDrop.n}</Link>}
-            </div>
-          </div>
-        </section>
-      )}
-
-      {fresh.length > 0 && (
-        <section className="wrap section fresh" aria-labelledby="fresh-title">
-          <div className="section-head">
-            <div>
-              <h2 id="fresh-title">Fresh from the agents</h2>
-              <p className="section-note">
-                The product agent reads what SF tech is arguing about, designs a shirt and pitches it. The CEO agent approves or kills it.
-                These made it. Pre-order only: you&rsquo;re charged only if one launches.
-              </p>
-            </div>
-            <Link href="/new" className="section-link">See all</Link>
-          </div>
-          <div className="grid">
-            {fresh.map((p) => <ProductCard key={p.id} p={p} />)}
-          </div>
-        </section>
-      )}
-
-      {preorders.length > 0 && (
-        <section className="wrap section" aria-labelledby="pre-title">
-          <div className="section-head">
-            <h2 id="pre-title">Drop 2, in pre-order</h2>
-            <Link href="/drops/2" className="section-link">See the drop</Link>
-          </div>
-          <div className="grid">
-            {preorders.map((p) => <ProductCard key={p.id} p={p} />)}
-          </div>
-        </section>
-      )}
+          <Link href="/shop" className="section-link">Shop everything</Link>
+        </div>
+        {latest.length ? (
+          <div className="grid">{latest.map((p, n) => <ProductCard key={p.id} p={p} priority={n < 2} />)}</div>
+        ) : (
+          <p className="empty">The shelves are empty right now. The agents are working on it.</p>
+        )}
+        <p className="latest-links">
+          <Link href="/drops" className="btn-quiet">Browse all drops</Link>
+          <Link href="/new" className="btn-quiet">Everything the agents designed</Link>
+        </p>
+      </section>
 
       <section className="wrap section" aria-labelledby="cat-title">
         <div className="section-head">
@@ -113,7 +97,7 @@ export default async function Home() {
           {cats.map((c) => (
             <Link key={c.slug} href={`/shop?category=${c.slug}`} className="cat">
               <div className="cat-img">
-                {c.items[0].images[0] && <Image src={c.items[0].images[0]} alt="" fill sizes="(max-width: 700px) 50vw, 25vw" />}
+                {c.items[0].images[0] && <Image {...localImage(c.items[0].images[0])} alt="" fill sizes="(max-width: 700px) 50vw, 25vw" />}
               </div>
               <span className="cat-label">{c.label}</span>
               <span className="cat-count">{c.items.length} {c.items.length === 1 ? "piece" : "pieces"}</span>
@@ -141,23 +125,34 @@ export default async function Home() {
         </section>
       )}
 
-      <section className="wrap section log" aria-labelledby="log-title">
+      <section className="wrap section log how" aria-labelledby="how-title">
         <div className="log-head">
-          <h2 id="log-title">How this shirt happened</h2>
+          <h2 id="how-title">How this store works</h2>
           <p className="log-intro">
-            Hallucinated is run by AI agents. A product agent designs, a CEO agent approves or kills, an ops agent orders from the
-            print shop and a growth agent posts. A person steps in where money moves.
+            Hallucinated is a clothing company run by AI agents. They find the joke, design the shirt, decide whether it ships,
+            put it on sale and post the ads. A person steps in where money moves.
           </p>
-          <a href={config.xUrl} className="section-link">Watch them work on X</a>
+          <Link href="/hq" className="section-link">Watch them work, live</Link>
         </div>
-        <ol className="log-lines">
-          {LOG.map((l) => (
-            <li key={l.who}>
-              <span className="log-who">{l.who}</span>
-              <span className="log-did">{l.did}</span>
-            </li>
-          ))}
-        </ol>
+        <div>
+          <ol className="log-lines">
+            {PIPELINE.map((l) => (
+              <li key={l.who}>
+                <span className="log-who">{l.who}</span>
+                <span className="log-did">{l.did}</span>
+              </li>
+            ))}
+          </ol>
+          {verdict && (
+            <figure className="how-verdict">
+              <blockquote>&ldquo;{verdict.ceo.reason.replace(/^["“]+|["”]+$/g, "")}&rdquo;</blockquote>
+              <figcaption>
+                The CEO agent on{" "}
+                {verdictProduct ? <Link href={`/p/${verdict.slug}`}>{verdictProduct.name}</Link> : verdict.title}, its latest call.
+              </figcaption>
+            </figure>
+          )}
+        </div>
       </section>
 
       <section className="wrap section alerts-band" aria-labelledby="alerts-title">

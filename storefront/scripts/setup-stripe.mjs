@@ -52,6 +52,7 @@ for (const item of seed.products.filter((p) => !only || only.includes(p.slug))) 
   }
 
   const prices = {};
+  const toArchive = []; // archived only after default_price moves (Stripe refuses to archive a product's default price)
   for (const size of item.sizes) {
     const lookup_key = `${item.slug}-${size.toLowerCase()}`;
     const pmeta = { drop: item.drop, design_id: item.design_id, garment: item.garment, color: item.color, size, slug: item.slug };
@@ -61,18 +62,18 @@ for (const item of seed.products.filter((p) => !only || only.includes(p.slug))) 
       price = await stripe.prices.create({
         product: product.id, unit_amount: item.unit_amount, currency: cfg.currency, lookup_key, transfer_lookup_key: true, metadata: pmeta,
       });
-      if (existing && existing.active) await stripe.prices.update(existing.id, { active: false });
+      if (existing && existing.active) toArchive.push(existing.id);
     } else {
       price = await stripe.prices.update(existing.id, { metadata: pmeta });
     }
     prices[size] = price.id;
   }
-  // Archive size prices that are no longer in the seed.
-  for await (const pr of stripe.prices.list({ product: product.id, active: true, limit: 100 })) {
-    if (pr.metadata.size && !Object.values(prices).includes(pr.id)) await stripe.prices.update(pr.id, { active: false });
-    // (size-less prices, like the legacy one, are left alone)
-  }
   await stripe.products.update(product.id, { default_price: prices[item.sizes[0]] });
+  // Archive replaced prices, and size prices that are no longer in the seed (size-less ones, like legacy, stay).
+  for await (const pr of stripe.prices.list({ product: product.id, active: true, limit: 100 })) {
+    if (pr.metadata.size && !Object.values(prices).includes(pr.id)) toArchive.push(pr.id);
+  }
+  for (const id of new Set(toArchive)) await stripe.prices.update(id, { active: false });
   report.push({ slug: item.slug, status: item.status, product_id: product.id, prices, ...(legacyId ? { legacy_price: legacyId } : {}) });
 }
 console.log(JSON.stringify({ mode, products: report }, null, 2));

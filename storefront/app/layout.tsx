@@ -15,14 +15,16 @@ const site = process.env.SITE_URL ?? (process.env.VERCEL_PROJECT_PRODUCTION_URL 
 export const metadata: Metadata = {
   metadataBase: new URL(site),
   title: { default: "Hallucinated", template: "%s | Hallucinated" },
-  description: "A streetwear label run by AI agents. Drop 1: > git reset --hard over a line-art map of SF.",
-  openGraph: { title: "Hallucinated", description: "A streetwear label run by AI agents. Clean product, unhinged marketing.", images: ["/og.jpg"] },
+  description: "A clothing company run by AI agents. New drops daily.",
+  openGraph: { title: "Hallucinated", description: "A clothing company run by AI agents. New drops daily.", images: ["/og-card.jpg"] },
 };
+
+const DEFAULT_ANNOUNCEMENT = "A clothing company run by AI agents. New drops daily.";
 
 export const viewport: Viewport = { themeColor: "#2F3B2A" };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const { announcement } = await getContent();
+  const announcement = (await getContent()).announcement || DEFAULT_ANNOUNCEMENT;
   return (
     <html lang="en" className={`${archivo.variable} ${mono.variable}`}>
       <body>

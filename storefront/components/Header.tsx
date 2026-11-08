@@ -7,9 +7,7 @@ import { useCart } from "./cart";
 const NAV = [
   { href: "/shop", label: "Shop" },
   { href: "/new", label: "New" },
-  { href: "/campaigns", label: "Ads" },
-  { href: "/drops/1", label: "Drop 1" },
-  { href: "/drops/2", label: "Drop 2" },
+  { href: "/drops", label: "Drops" },
   { href: "/info", label: "Info" },
 ];
 
@@ -24,7 +22,7 @@ export default function Header() {
         </Link>
         <nav className="header-nav" aria-label="Main">
           {NAV.map((n) => (
-            <Link key={n.href} href={n.href} aria-current={path === n.href || (n.href === "/shop" && path.startsWith("/p/")) ? "page" : undefined}>
+            <Link key={n.href} href={n.href} aria-current={path === n.href || (n.href === "/shop" && path.startsWith("/p/")) || (n.href === "/drops" && path.startsWith("/drops/")) ? "page" : undefined}>
               {n.label}
             </Link>
           ))}

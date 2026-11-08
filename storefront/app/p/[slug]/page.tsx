@@ -6,9 +6,10 @@ import ProductBuy from "@/components/ProductBuy";
 import ProductCard from "@/components/ProductCard";
 import SizeGuide from "@/components/SizeGuide";
 import WhyPanel from "@/components/WhyPanel";
+import SeenIn from "@/components/SeenIn";
 import { dropNumber, getCatalog, getProduct, isAgentDesign } from "@/lib/catalog";
 import { config, formatPrice, windowLabel } from "@/lib/config";
-import { getContent } from "@/lib/content";
+import { getContent, visibleCampaigns } from "@/lib/content";
 
 export const revalidate = 60;
 export const dynamicParams = true;
@@ -35,6 +36,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
   // A dossier shows only for a product that exists in this deployment's own catalog (we're on its page).
   const dossier = agent ? ((await getContent()).designs ?? []).find((d) => d.slug === p.slug) ?? null : null;
   const when = windowLabel(p.launchWindow);
+  const seenIn = visibleCampaigns(await getContent()).filter((c) => c.featured_products.includes(p.slug)).slice(0, 3);
 
   return (
     <div className="wrap page">
@@ -96,6 +98,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
         </div>
       </div>
       {dossier && <WhyPanel d={dossier} />}
+      <SeenIn ads={seenIn} />
       {more.length > 0 && (
         <section className="section" aria-labelledby="more-title">
           <div className="section-head"><h2 id="more-title">More from Hallucinated</h2></div>

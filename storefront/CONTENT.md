@@ -182,7 +182,7 @@ P=$(curl -s https://api.stripe.com/v1/products -u "$STRIPE_SECRET_KEY:" \
   -d "metadata[design_id]=<design id>" -d "metadata[garment]=tee" -d "metadata[color]=black" \
   -d "metadata[category]=tees" -d "metadata[placement]=back" | jq -r .id)
 for SIZE in S M L XL; do
-  curl -s https://api.stripe.com/v1/prices -u "$STRIPE_SECRET_KEY:" -d product=$P -d unit_amount=6500 -d currency=usd \
+  curl -s https://api.stripe.com/v1/prices -u "$STRIPE_SECRET_KEY:" -d product=$P -d unit_amount=3800 -d currency=usd \
     -d lookup_key=<slug>-$(echo $SIZE | tr A-Z a-z) -d transfer_lookup_key=true \
     -d "metadata[size]=$SIZE" -d "metadata[design_id]=<design id>" -d "metadata[garment]=tee" \
     -d "metadata[color]=black" -d "metadata[drop]=agents" -d "metadata[slug]=<slug>" -d "metadata[origin]=agents"
@@ -195,7 +195,7 @@ done
   - Text without a digit ("When it launches") is shown as plain "Pre-order", with no date promised.
   - A real month ("Jan 2027") is shown as "Est. Jan 2027".
 - **`placement`**: `back` or `front`. It decides which mockup is the product's first image and how the product page describes the print.
-- **Price**: `unit_amount` 6500, the same as drop 1, unless John says otherwise.
+- **Price**: `unit_amount` 3800 ($38, the store price for tees), unless John says otherwise. The site always shows whatever Stripe says.
 - **Images**:
   - `images[0]` is the card and first gallery image.
   - Add `MOCKUP_FLAT` as the second image: the print on shirt black.
@@ -244,7 +244,9 @@ curl -s -X POST $STORE/api/revalidate -H "Authorization: Bearer $STORE_ADMIN_SEC
 
 ## 5. Campaigns: the agents' ads
 
-Ads made by the creative agent and passed by the vision reviewer appear in three places:
+Ads made by the creative agent and passed by the vision reviewer appear in several places:
+- product pages: an "As seen in" strip for every product named in `featured_products` (newest 3);
+- `/hq`: an "Ads the agents made" row (newest 6 non-test);
 - `/campaigns` ("Ads, by the agents"): a wall of all of them, newest first;
 - the home hero: the newest 1–3 **image** campaigns rotate in after the banners;
 - the content admin API: Growth posts the same media on X.
@@ -306,6 +308,7 @@ curl -s -X PATCH $STORE/api/admin/content -H "Authorization: Bearer $STORE_ADMIN
     "event": false,
     "sources": [],
     "featured_products": ["git-reset-hard-tee"],
+    "x_url": "https://x.com/hallucinateddpt/status/<id>",
     "created_at": "2026-11-08T18:05:00Z",
     "test": false
   } }'
@@ -322,6 +325,7 @@ curl -s -X PATCH $STORE/api/admin/content -H "Authorization: Bearer $STORE_ADMIN
 | `event` | `true` when the ad reacts to a specific news event. Then `sources` must have at least 1 entry. |
 | `sources` | ≤ 6 `{label ≤120, url http(s)}`. Rendered as plain links, never embedded. |
 | `featured_products` | ≤ 4 product slugs. The first one that is active in the catalog becomes the ad's link (hero and wall); otherwise it links to `/campaigns`. |
+| `x_url` | optional `https://x.com/...` link to the post that ran this ad. When set, the product page's "As seen in" strip links there (otherwise to `/campaigns`). Add it later with an upsert of `{id, x_url}` once Growth has posted. |
 | `created_at` | ISO time. Sort order, newest first. |
 | `test` | `true` = **never shown on production**, only on previews and locally. Use it for every dry run. |
 | `active` | optional. `false` hides the campaign without deleting it. |

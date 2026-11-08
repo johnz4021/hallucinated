@@ -65,6 +65,7 @@ export default async function Campaigns() {
                 <p className="ad-meta">
                   <time dateTime={c.created_at}>{when(c.created_at)}</time>
                   {product && <>. Shirt: <Link href={`/p/${product.slug}`}>{product.name}</Link></>}
+                  {c.x_url && <>. <a href={c.x_url} rel="noopener noreferrer" target="_blank">See the post on X</a></>}
                 </p>
               </li>
             );

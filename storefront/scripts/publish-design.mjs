@@ -1,5 +1,5 @@
 // Reference implementation of CONTENT.md §4 (agent design publish flow), used for sandbox tests.
-// Usage: node scripts/publish-design.mjs <dossier.json> --print-url <blob url> --base <admin base url> [--price 6500]
+// Usage: node scripts/publish-design.mjs <dossier.json> --print-url <blob url> --base <admin base url> [--price 3800]
 //   dossier.json: { slug, design_id, title, placement?, description, features?, trend, pitch, ceo, product_session?, ceo_session?, created_at? }
 // Stripe calls use whichever STRIPE_SECRET_KEY is in the repo-root .env (test unless ALLOW_LIVE_STRIPE=1).
 import Stripe from "stripe";
@@ -12,7 +12,7 @@ const d = JSON.parse(readFileSync(args[0], "utf8"));
 const printUrl = opt("--print-url");
 const base = (opt("--base", "https://hallucinated-store.vercel.app")).replace(/\/$/, "");
 const STORE = "https://hallucinated-store.vercel.app"; // mockup URLs always use production; the site localizes them
-const price = Number(opt("--price", 6500));
+const price = Number(opt("--price", 3800));
 const admin = envVar("STORE_ADMIN_SECRET");
 const { key, mode } = stripeKey();
 const stripe = new Stripe(key);
