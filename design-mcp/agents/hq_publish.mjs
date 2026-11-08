@@ -395,10 +395,14 @@ function buildV2({ rootDir, cache, sessions, derived, stripe, xl, liveProposals,
   S("product", d1.stages.designed.at, `Designed drop #1: "${d1.title}"`, d1.stages.live?.url, d1.artwork_url, "design", "shipped");
   S("ceo", d1.stages.ceo.at, "Approved drop #1 for print", d1.stages.live?.url, d1.artwork_url, "verdict", "approved");
   for (const p of plans) S("ceo", p.at, `Set the plan${p.plan?.themes?.length ? ` (${p.plan.themes.length} themes)` : ""}`, null, null, "plan", null);
-  for (const a of liveAds) S("creative", a.created_at, `Made ${a.kind === "video" ? "a video" : "an image"} ad${a.format ? ` (${String(a.format).replace(/_/g, " ")})` : ""}`, a.x_url || a.posted?.url || null, a.kind === "video" ? a.poster_url : a.media_url, "ad", a.state || null);
+  // withdrawn ads (the retired poster formats John rejected) were never shipped: no gallery, feed or flow entry, no thumb
+  const withdrawn = Object.values(ads.ads || {}).filter((a) => a.state === "withdrawn");
+  const withdrawnMedia = new Set(withdrawn.flatMap((a) => [a.media_url, a.poster_url]).filter(Boolean));
+  const withdrawnIds = new Set(withdrawn.map((a) => a.id));
+  for (const a of liveAds.filter((a) => a.state !== "withdrawn")) S("creative", a.created_at, `Made ${a.kind === "video" ? "a video" : "an image"} ad${a.format ? ` (${String(a.format).replace(/_/g, " ")})` : ""}`, a.x_url || a.posted?.url || null, a.kind === "video" ? a.poster_url : a.media_url, "ad", a.state || null);
   const adByReview = Object.fromEntries(Object.values(ads.ads || {}).filter((a) => a.review_id).map((a) => [a.review_id, a]));
-  for (const r of liveReviews.filter((r) => r.done_at)) { const a = adByReview[r.review_id]; S("reviewer", r.done_at, r.pass ? "Passed an ad" : "Sent an ad back", null, a ? (a.kind === "video" ? a.poster_url : a.media_url) : null, "verdict", r.pass ? "passed" : "rejected"); }
-  for (const p of posts) S("growth", p.at, p.text || "Posted on X", X_URL(p.id), p.media, "post", p.pillar || null);
+  for (const r of liveReviews.filter((r) => r.done_at)) { const a = adByReview[r.review_id]; S("reviewer", r.done_at, r.pass ? "Passed an ad" : "Sent an ad back", null, a && a.state !== "withdrawn" ? (a.kind === "video" ? a.poster_url : a.media_url) : null, "verdict", r.pass ? "passed" : "rejected"); }
+  for (const p of posts.filter((p) => !withdrawnIds.has(p.ad_id) && !withdrawnMedia.has(p.media))) S("growth", p.at, p.text || "Posted on X", X_URL(p.id), p.media, "post", p.pillar || null);
   for (const p of replies) S("growth", p.at, p.kind === "browser_reply" ? "Replied to a post on X" : "Replied to a mention", p.id ? X_URL(p.id) : null, null, "reply", p.kind === "browser_reply" ? "browser" : "mention");
   for (const c of sessions) {
     const d = derived[c.id];
@@ -508,7 +512,9 @@ const TOOL_META = {
   ops_courier_request: ["Courier request", "courier"], preorder_cancel: ["Cancel pre-order", "money"], preorder_send_payment_link: ["Payment link", "mail"],
   flag_john: ["Flag founder", "flag"],
 };
-const toolMeta = (n) => { const m = TOOL_META[n]; return m ? { label: m[0], icon: m[1] } : { label: clip(String(n || "tool").replace(/^.*\./, "").replace(/_/g, " "), 20), icon: "other" }; };
+// the storefront's icon set, exactly; anything else renders as "other"
+const ICONS = new Set(["search", "trends", "design", "image", "video", "review", "check", "post", "reply", "browser", "store", "money", "courier", "inbox", "plan", "flag", "catalog", "mail", "other"]);
+const toolMeta = (n) => { const m = TOOL_META[n]; return m ? { label: m[0], icon: ICONS.has(m[1]) ? m[1] : "other" } : { label: clip(String(n || "tool").replace(/^.*\./, "").replace(/_/g, " "), 20), icon: "other" }; };
 const PRIVATE_ROLES = new Set(["ops", "support"]);
 let defsCache = null;
 const defsModel = {};
@@ -569,7 +575,7 @@ function buildAgentsDoc({ rootDir, cache, sessions, derived, ship, v2agents, d1,
           case "x_post": { const id = o.id || near(xl.posts.filter((p) => p.kind === "post" && p.id), at, 15_000)?.id; if (ok && id && !/^dry-/.test(String(id))) { url = X_URL(id); summary = plain(o.text || xl.posts.find((p) => p.id === id)?.text || "Posted on X"); } break; }
           case "x_reply": if (ok && o.id) { url = X_URL(o.id); summary = "Replied to a mention"; } break;
           case "x_browser_reply": if (ok) { const r = near(xl.posts.filter((p) => p.kind === "browser_reply"), at, 120_000); summary = "Replied to a post on X"; if (r?.id) url = X_URL(r.id); } break;
-          case "ad_submit": { const ad = (e.a.review_id && adList.find((x) => x.review_id === e.a.review_id)) || near(adList, at, 120_000, "created_at"); if (ok) { summary = `Published ${ad?.kind === "video" ? "a video" : "an"} ad${ad?.format ? ` (${String(ad.format).replace(/_/g, " ")})` : ""}`; thumb = thumbOfAd(ad); url = pub(ad?.x_url) || null; } break; }
+          case "ad_submit": { const ad = (e.a.review_id && adList.find((x) => x.review_id === e.a.review_id)) || near(adList, at, 120_000, "created_at"); if (ok) { const gone = ad?.state === "withdrawn"; summary = `${gone ? "Made" : "Published"} ${ad?.kind === "video" ? "a video" : "an"} ad${ad?.format ? ` (${String(ad.format).replace(/_/g, " ")})` : ""}${gone ? ", later withdrawn" : ""}`; thumb = gone ? null : thumbOfAd(ad); url = gone ? null : pub(ad?.x_url) || null; } break; }
           case "customania_checkout": summary = ok ? `Cart verified${o.total ? `, $${o.total}` : ""}` : ""; break;
           case "courier_status": if (o.status === "completed" && o.result) summary = o.result.booked ? `Courier booked${money(o.result.price) ? ` ($${money(o.result.price).toFixed(2)})` : ""}` : `Quote${money(o.result.price) ? ` $${money(o.result.price).toFixed(2)}` : ""}`; break;
         }
