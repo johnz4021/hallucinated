@@ -53,8 +53,9 @@ export default function Info() {
         <details>
           <summary>How do I choose shipping or pickup for a pre-order?</summary>
           <p>
-            Stripe&rsquo;s checkout can&rsquo;t take a shipping choice for something you pay for later, so we&rsquo;ll email before we
-            charge at launch and ask: US shipping ({shipping.flat()}, free over {shipping.freeOver()}) or free pickup in SF.
+            In your bag, before checkout: ship to me ({shipping.flat()}, free over {shipping.freeOver()}) or pick up in SF (free). Checkout
+            then asks for your address either way; Stripe needs it, and we only use it if we ship. When it launches we charge the item
+            price, plus {shipping.flat()} shipping if you chose shipping and your order is under {shipping.freeOver()}.
           </p>
         </details>
         <details>

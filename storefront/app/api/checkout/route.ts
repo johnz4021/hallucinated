@@ -20,7 +20,7 @@ function siteOrigin(req: Request) {
 const bad = (error: string, status = 400) => NextResponse.json({ error }, { status });
 
 export async function POST(req: Request) {
-  let body: { items?: unknown };
+  let body: { items?: unknown; fulfilment?: unknown };
   try {
     body = await req.json();
   } catch {
@@ -100,7 +100,10 @@ export async function POST(req: Request) {
         },
       });
     } else {
+      const fulfilment = body.fulfilment === "ship" || body.fulfilment === "pickup" ? body.fulfilment : null;
+      if (!fulfilment) return bad("Choose shipping or pickup in your bag first.");
       const total = lines.reduce((s, l) => s + l.price.unit_amount! * l.quantity, 0);
+      const shipCents = fulfilment === "ship" && total < config.shipping.free_threshold ? config.shipping.rates.ship.amount : 0;
       const windows = datedWindows(lines.map((l) => l.product.metadata.launch_window));
       const preorderItems = JSON.stringify(lines.map((l) => ({ price_id: l.price.id, qty: l.quantity })));
       if (preorderItems.length > 500) return bad("Too many different pre-order items for one checkout. Split it in two.");
@@ -112,6 +115,8 @@ export async function POST(req: Request) {
         currency: config.currency,
         launch_window: windows,
         items: summary,
+        fulfilment,
+        preorder_shipping: String(shipCents),
       };
       const what = lines.map((l) => `${l.quantity} x ${l.product.name} (${l.price.metadata.size})`).join(", ");
       session = await stripe.checkout.sessions.create({
@@ -122,13 +127,20 @@ export async function POST(req: Request) {
         customer_creation: "always",
         metadata,
         setup_intent_data: { metadata, description: `Pre-order: ${what}`.slice(0, 1000) },
+        shipping_address_collection: { allowed_countries: config.shipping.countries as Stripe.Checkout.SessionCreateParams.ShippingAddressCollection.AllowedCountry[] },
         custom_text: {
+          shipping_address: {
+            message: fulfilment === "pickup"
+              ? "You chose pickup in SF. Stripe still asks for an address; we only use it if we ship."
+              : "Where we ship it when it launches.",
+          },
           submit: {
             message:
               `${lines.every((l) => l.product.metadata.origin === "agents") ? "Designed by the agents. " : ""}` +
-              `Pre-order: ${what}. You'll be charged ${formatPrice(total)} only if it launches` +
+              `Pre-order: ${what}. You'll be charged ${formatPrice(total)}` +
+              `${shipCents ? ` + ${formatPrice(shipCents)} shipping` : fulfilment === "ship" ? " (free shipping)" : " (free SF pickup)"} only if it launches` +
               `${windows ? ` (est. ${windows})` : ""}. If it never launches, you're never charged. ` +
-              `Cancel any time before launch: email ${config.contactEmail}. Before we charge, we'll ask whether you want US shipping or SF pickup.`,
+              `Cancel any time before launch: email ${config.contactEmail}.`,
           },
         },
       });

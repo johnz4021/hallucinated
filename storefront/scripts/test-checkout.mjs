@@ -17,7 +17,9 @@ const stripe = new Stripe(key);
 mkdirSync("test-output", { recursive: true });
 
 const plan = kind === "preorder"
-  ? [{ slug: "wordmark-hoodie-forest", size: "M", qty: 1 }, { slug: "wordmark-cap-black", size: null, qty: 1 }]
+  ? process.env.PLAN === "single"
+    ? [{ slug: "wordmark-cap-black", size: null, qty: 1 }]
+    : [{ slug: "wordmark-hoodie-forest", size: "M", qty: 1 }, { slug: "wordmark-cap-black", size: null, qty: 1 }]
   : process.env.PLAN === "single"
     ? [{ slug: "git-reset-hard-tee", size: "M", qty: 1 }]
     : [{ slug: "git-reset-hard-tee", size: "M", qty: 1 }, { slug: "git-reset-hard-tee", size: "L", qty: 2 }];
@@ -46,13 +48,14 @@ try {
     await page.waitForSelector(".added", { timeout: 10000 });
   }
   await page.goto(`${url}/cart`, { waitUntil: "networkidle" });
+  if (kind === "preorder") await page.check(`input[name="fulfilment"][value="${process.env.SHIP ?? "ship"}"]`);
   await page.screenshot({ path: `test-output/cart-${kind}.png`, fullPage: true });
   await page.click(".cart-summary button.cta");
   await page.waitForURL(/checkout\.stripe\.com/, { timeout: 30000 });
 
   await page.fill("#email", email);
   await page.fill("#individualName", name);
-  if (kind === "order" && (await page.locator("#shippingAddressLine1").count())) {
+  if (await page.locator("#shippingAddressLine1").count()) {
     // Sandbox-only test address (not a real person's).
     await page.fill("#shippingName", name);
     await page.fill("#shippingAddressLine1", "1 Test Street");
@@ -61,6 +64,7 @@ try {
     await page.fill("#shippingPostalCode", "94110");
     await page.selectOption("#shippingAdministrativeArea", "CA").catch(() => {});
     const want = (process.env.SHIP ?? "ship") === "pickup" ? /Pickup in San Francisco/ : /US shipping/;
+    if (kind === "preorder") { /* setup mode: no shipping options, address only */ } else {
     const picked = await page.evaluate((src) => {
       const re = new RegExp(src);
       for (const input of document.querySelectorAll('input[name="shipping-rate"]')) {
@@ -72,6 +76,7 @@ try {
       return false;
     }, want.source);
     if (!picked) throw new Error("shipping option not found");
+    }
     await page.waitForTimeout(800);
   }
   const cardTab = page.locator('[data-testid="card-accordion-item-button"]');
@@ -97,6 +102,7 @@ try {
   let result;
   if (kind === "preorder") {
     const s = await stripe.checkout.sessions.retrieve(sessionId, { expand: ["setup_intent", "customer"] });
+    const shipInfo = s.collected_information?.shipping_details ?? s.shipping_details ?? null;
     const si = s.setup_intent;
     const pm = si?.payment_method ? await stripe.paymentMethods.retrieve(si.payment_method) : null;
     result = {
@@ -105,10 +111,15 @@ try {
       setup_intent: si?.id, setup_intent_status: si?.status, setup_intent_usage: si?.usage, setup_intent_metadata: si?.metadata,
       payment_method: pm?.id, pm_customer: pm?.customer, card: pm?.card ? `${pm.card.brand} ${pm.card.last4}` : null,
       customer_details: { email: s.customer_details?.email, name: s.customer_details?.name },
+      // Setup mode stores the shipping address on the Customer (customer.shipping), not on the session.
+      shipping_details_present: !!(shipInfo?.address?.line1 || s.customer?.shipping?.address?.line1),
+      shipping_details_location: shipInfo?.address?.line1 ? "session" : s.customer?.shipping?.address?.line1 ? "customer.shipping" : null,
     };
     const items = JSON.parse(s.metadata.preorder_items ?? "[]");
-    ok = s.status === "complete" && s.mode === "setup" && s.metadata.kind === "preorder" && items.length === 2 &&
-      si?.status === "succeeded" && si?.usage === "off_session" && pm && pm.customer === s.customer?.id && result.customer_details.email === email;
+    const wantItems = plan.length;
+    ok = s.status === "complete" && s.mode === "setup" && s.metadata.kind === "preorder" && items.length === wantItems &&
+      si?.status === "succeeded" && si?.usage === "off_session" && pm && pm.customer === s.customer?.id && result.customer_details.email === email &&
+      s.metadata.fulfilment === (process.env.SHIP ?? "ship") && si?.metadata?.fulfilment === s.metadata.fulfilment && result.shipping_details_present;
   } else {
     const s = await stripe.checkout.sessions.retrieve(sessionId, { expand: ["line_items.data.price.product", "shipping_cost.shipping_rate"] });
     const ship = s.collected_information?.shipping_details ?? s.shipping_details ?? null;

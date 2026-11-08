@@ -132,7 +132,10 @@ List completed Checkout Sessions (`GET /v1/checkout/sessions?status=complete&cre
 
 ### 3.2 Pre-orders: `mode=setup`, `metadata.kind="preorder"`
 - `metadata.preorder_items`: a JSON string, `[{"price_id":"price_…","qty":1}, …]`. Look each price up for size, design and garment.
-- `metadata.preorder_total`: the amount to charge at launch, in cents. `metadata.currency` is `usd`. `metadata.launch_window` and `metadata.drop` are also set.
+- `metadata.preorder_total`: the item total to charge at launch, in cents.
+- `metadata.fulfilment`: `ship` or `pickup`, chosen in the bag before checkout (sessions from before this change don't have it: ask the buyer).
+- `metadata.preorder_shipping`: shipping in cents to add at launch: 600 when `fulfilment=ship` and the item total is under $75, else 0 (the config rule at the time of the order). Charge `preorder_total + preorder_shipping`.
+- The shipping address is collected in Checkout for every pre-order (Stripe can't make it optional for pickup). In setup mode Stripe saves it on the **Customer** (`customer.shipping`), not on the session. It stays in Stripe; never read or copy it. Whether one exists is enough for the agents. `metadata.currency` is `usd`. `metadata.launch_window` and `metadata.drop` are also set.
 - **Customer:** `customer` (always created), plus `customer_details.email` and `.name`.
 - **Saved card:** `setup_intent`. Expand it; its `payment_method` is attached to the customer, with `usage=off_session`.
 - **Charging at launch** is the agents' job, behind an `ask` tool with John's OK. Create a PaymentIntent with `customer`, `payment_method`, `amount=preorder_total`, `currency`, `off_session=true`, `confirm=true` and the same metadata. Expect some to need re-authentication (`authentication_required`): email those customers a payment link. The site has no charge endpoint.

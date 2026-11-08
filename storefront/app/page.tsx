@@ -36,8 +36,8 @@ export default async function Home() {
       image_alt: l.images[0].alt,
       cta_label: "Shop the drop",
       cta_href: `/p/${l.slug}`,
-      focus: "right",
-      fit: "contain",
+      focus: "center",
+      fit: "cover",
       kicker: l.test ? "New drop (test)" : "New drop",
     };
   });

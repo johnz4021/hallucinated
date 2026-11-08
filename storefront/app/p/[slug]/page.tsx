@@ -102,7 +102,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
                 <li>US shipping: {shipping.flat()} flat, free on orders over {shipping.freeOver()}. Ships within {shipping.days()}{p.status === "preorder" ? " of launch" : ""}, with tracking by email.</li>
                 <li>Pickup in San Francisco: free. We email the address and a pickup window.</li>
                 <li>Outside the US: {config.shipping.international}</li>
-                {p.status === "preorder" && <li>Pre-orders: Checkout can&rsquo;t take a shipping choice for something you pay for later, so we&rsquo;ll ask whether you want shipping or pickup before we charge at launch.</li>}
+                {p.status === "preorder" && <li>Pre-orders: choose shipping or pickup in your bag. At launch we charge the item price, plus {shipping.flat()} shipping if you chose shipping and the order is under {shipping.freeOver()}.</li>}
                 <li>Wrong size? Exchange it within {config.shipping.returns_days} days. Anything wrong with the shirt: full refund. <Link href="/info#returns">Returns</Link></li>
               </ul>
             </details>

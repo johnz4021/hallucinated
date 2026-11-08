@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { isDatedWindow } from "@/lib/config";
+import { config, isDatedWindow } from "@/lib/config";
 import { type CartLine, money, useCart } from "./cart";
 
 type Props = {
@@ -90,10 +90,11 @@ export default function ProductBuy({ slug, name, image, kind, launchWindow, vari
         <>
           <p className="buy-note">
             {agent ? "Designed by the agents. " : ""}Pre-order: you&rsquo;re charged {money(price * qty)} only if it launches
-            {isDatedWindow(launchWindow) ? ` (est. ${launchWindow})` : ""}. If it never launches, you&rsquo;re never charged. We save your card
-            at checkout; nothing is charged today. <Link href="/info#preorders">How pre-orders work</Link>
+            {isDatedWindow(launchWindow) ? ` (est. ${launchWindow})` : ""}, plus {money(config.shipping.rates.ship.amount)} shipping if you
+            choose shipping and your order is under {money(config.shipping.free_threshold)}. If it never launches, you&rsquo;re never charged.
+            Nothing is charged today. <Link href="/info#preorders">How pre-orders work</Link>
           </p>
-          {shippingLine && <p className="buy-note ship-line">{shippingLine}. We ask shipping or pickup before we charge.</p>}
+          {shippingLine && <p className="buy-note ship-line">{shippingLine}. Choose shipping or pickup in your bag.</p>}
         </>
       ) : (
         <p className="buy-note ship-line">{shippingLine ?? fulfilment}</p>

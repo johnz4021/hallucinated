@@ -555,3 +555,15 @@ details > p, details > table { margin: 0 0 16px; }
 /* Card hover: on-model launch shot */
 .card-img .card-hover { opacity: 0; transition: opacity 250ms ease; object-fit: cover; }
 .card:hover .card-img .card-hover, .card:focus-visible .card-img .card-hover { opacity: 1; }
+
+/* Launch slides fill the hero (design rule: images fill their space) */
+.focus-center .hero-img img { object-position: 50% 22%; }
+
+/* Pre-order fulfilment choice (bag) */
+.fulfil-choice { border: 0; margin: 0; padding: 0; display: grid; gap: 8px; }
+.fulfil-choice legend { font-weight: 700; margin-bottom: 8px; padding: 0; }
+.fulfil-choice label { display: flex; gap: 12px; align-items: flex-start; padding: 12px 14px; border: 1.5px solid rgba(242, 238, 230, 0.3); border-radius: 4px; cursor: pointer; }
+.fulfil-choice label.is-on { border-color: var(--bone); background: rgba(242, 238, 230, 0.06); }
+.fulfil-choice input { margin-top: 3px; accent-color: var(--sand); width: 18px; height: 18px; }
+.fulfil-choice span { display: grid; gap: 2px; }
+.fulfil-choice small { color: rgba(242, 238, 230, 0.8); font-size: 14px; }

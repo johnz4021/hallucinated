@@ -11,7 +11,7 @@ export const metadata: Metadata = { title: "Thanks", robots: { index: false } };
 
 type View =
   | { kind: "order"; name: string | null; email: string | null; total: number; currency: string; lines: string[]; fulfilment: "ship" | "pickup" | null }
-  | { kind: "preorder"; name: string | null; email: string | null; total: number; window: string; lines: string[] };
+  | { kind: "preorder"; name: string | null; email: string | null; total: number; window: string; lines: string[]; fulfilment: string | null; shippingCents: number };
 
 async function load(id?: string): Promise<View | null> {
   if (!id || !/^cs_(test|live)_[A-Za-z0-9]+$/.test(id)) return null;
@@ -28,7 +28,7 @@ async function load(id?: string): Promise<View | null> {
           return `${it.qty} × ${(p.product as Stripe.Product).name}, ${p.metadata.size === "OS" ? "one size" : `size ${p.metadata.size}`}`;
         }),
       );
-      return { kind: "preorder", name, email, total: Number(s.metadata?.preorder_total ?? 0), window: datedWindows((s.metadata?.launch_window ?? "").split(", ")), lines };
+      return { kind: "preorder", name, email, total: Number(s.metadata?.preorder_total ?? 0), window: datedWindows((s.metadata?.launch_window ?? "").split(", ")), lines, fulfilment: s.metadata?.fulfilment ?? null, shippingCents: Number(s.metadata?.preorder_shipping ?? 0) };
     }
     if (s.mode === "payment" && s.payment_status === "paid") {
       const lines = (s.line_items?.data ?? []).map((li) => {
@@ -65,9 +65,15 @@ export default async function Success({ searchParams }: { searchParams: Promise<
           <ul className="note-lines">{v.lines.map((l) => <li key={l}>{l}</li>)}</ul>
           {v.kind === "preorder" ? (
             <p>
-              Nothing was charged today. We&rsquo;ll charge {formatPrice(v.total)} to the card you saved only if it launches
-              {v.window ? ` (est. ${v.window})` : ""}. If it never launches, you&rsquo;re never charged. Before we charge, we&rsquo;ll email
-              to ask whether you want US shipping or free SF pickup. To cancel, email {config.contactEmail}.
+              Nothing was charged today. We&rsquo;ll charge {formatPrice(v.total)}
+              {v.shippingCents ? ` + ${formatPrice(v.shippingCents)} shipping` : ""} to the card you saved only if it launches
+              {v.window ? ` (est. ${v.window})` : ""}. If it never launches, you&rsquo;re never charged.{" "}
+              {v.fulfilment === "pickup"
+                ? "You chose free pickup in SF; we'll email the address and a window."
+                : v.fulfilment === "ship"
+                  ? `We'll ship it within ${shipping.days()} of launch and email the tracking link.`
+                  : ""}{" "}
+              To cancel, email {config.contactEmail}.
             </p>
           ) : (
             <p>
