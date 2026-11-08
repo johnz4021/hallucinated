@@ -14,6 +14,7 @@ import { startServer } from "../server.mjs";
 import { BILLING } from "./config.mjs";
 import { agentDefs, defsByName, autoConfirmable } from "./defs.mjs";
 import { execFile } from "node:child_process";
+import { acquireLock, releaseLock, unlinkIfOurs } from "./serve_lock.mjs";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const MCP = path.resolve(HERE, ".."), ROOT = path.resolve(MCP, "..");
@@ -21,6 +22,11 @@ const STATE = path.join(ROOT, ".serve.json");
 const LOG = path.join(ROOT, "serve.log");
 const log = (m) => { const l = `[${new Date().toTimeString().slice(0, 8)}] ${m}`; console.log(l); fs.appendFileSync(LOG, l + "\n"); fs.appendFileSync(path.join(ROOT, "naive.log"), l + "\n"); };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+// one serve at a time: a second launch exits before touching tunnels, agents or .serve.json
+const LOCK = path.join(ROOT, ".serve.lock");
+const lock = acquireLock(LOCK);
+if (!lock.ok) { log(`== serve already running (pid ${lock.holder}); this launch exits without changing anything`); process.exit(0); }
+process.on("exit", () => releaseLock(LOCK));
 const env = fs.readFileSync(path.join(ROOT, ".env"), "utf8");
 const key = (n) => (env.match(new RegExp(`${n}\\s*=\\s*["']?([^\\s"']+)`)) || [])[1];
 const v = createClient({ baseUrl: "https://api.vetta.sh", apiKey: key("VETTA_API_KEY") });
@@ -139,6 +145,6 @@ const spendTick = async () => {
 setTimeout(spendTick, 30_000).unref();
 setInterval(spendTick, 5 * 60_000).unref();
 
-const stop = () => { try { fs.unlinkSync(STATE); } catch {} try { tunnel.stop(); } catch {} server.close(); log("== serve stopped"); process.exit(0); };
+const stop = () => { unlinkIfOurs(STATE); releaseLock(LOCK); try { tunnel.stop(); } catch {} server.close(); log("== serve stopped"); process.exit(0); };
 process.on("SIGINT", stop); process.on("SIGTERM", stop); process.on("SIGHUP", stop);
 log("serve is up. Leave this window open; close it (or Ctrl-C) to stop the tools.");

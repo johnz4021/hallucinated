@@ -30,6 +30,7 @@ x-connect-link.txt
 
 # serve.command state (local URL)
 .serve.json
+.serve.lock
 serve.log
 
 # X Ads OAuth token

@@ -36,6 +36,12 @@ for (const line of ps.split("\n")) {
   for (const [re, what] of SCRIPTS) if (re.test(line) && !seen.has(what)) { seen.add(what); busy.push(`process: ${what} (pid ${line.trim().split(/\s+/)[0]})`); }
 }
 
+// 1b. more than one serve.mjs (overlapping serve.command launches, Sat 17:47): reported, not blocking (a restart via
+// serve.command pkills them all; the single-instance lock in serve_lock.mjs prevents new ones)
+const serves = ps.split("\n").filter((l) => /node\b.*agents\/serve\.mjs/.test(l) && !/^\s*\d+\s+(\/bin\/)?(ba|z)?sh\b/.test(l)).map((l) => l.trim().split(/\s+/)[0]);
+const serveNote = serves.length > 1 ? `WARNING: ${serves.length} serve processes running (pids ${serves.join(", ")}); keep one (the pid in .serve.json / .serve.lock)` : null;
+if (serveNote) console.log(serveNote);
+
 // 2. Naïve sessions of our agents
 const env = fs.existsSync(path.join(ROOT, ".env")) ? fs.readFileSync(path.join(ROOT, ".env"), "utf8") : "";
 const key = (env.match(/^VETTA_API_KEY=(.+)$/m) || [])[1]?.trim().replace(/^["']|["']$/g, "");
@@ -59,4 +65,4 @@ try {
 } catch (e) { console.log(`can't check Naïve sessions: ${e.message}`); process.exit(2); }
 
 if (busy.length) { console.log(`NOT safe to restart serve (${busy.length} busy):\n  ${busy.join("\n  ")}`); process.exit(1); }
-console.log("safe to restart serve: no hallucinated-* session running, queued or awaiting approval; no order/pickup script or profile browser open");
+console.log(`safe to restart serve: no hallucinated-* session running, queued or awaiting approval; no order/pickup script or profile browser open${serves.length === 1 ? "; 1 serve running" : serves.length ? "" : "; no serve running"}`);
