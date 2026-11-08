@@ -49,7 +49,7 @@ A streetwear brand on SF tech humor, run by Naïve agents (`@usenaive-sdk/vetta`
 ## Next
 1. Real-card purchase check on the live store (John, refundable). Decide Vercel Pro (Hobby is non-commercial) and Stripe Tax. Confirm pre-order prices/launch windows and that Customania can make them.
 2. Banners/lookbook from the agents (content admin API exists; no agent tool yet). Mockup renders bone ink as dim grey (storefront `lib/tee-svg.ts`).
-3. Later (John): sales batching once a day: `ops-sales` cron `"40 * * * *"` → `"0 21 * * *"` in `defs.mjs` plus `SALES_MIN_QTY=1`.
+3. Done (Sat 19:50, John): sales batching is once a day, the daily supplier order: `ops-sales` cron `"0 9 * * *"` PT in `defs.mjs`, `SALES_MIN_QTY` default 1. Applied to Naïve with `ops_daily.command` (only that deployment; `--off` pauses it).
 4. Pickup for drop #1 is back as a one-off (15:00): `pickup_watch.command` (agents/pickup_watch.mjs) checks the inbox every 5 min for a pickup mail naming CF5A93CRK / #1506 (John's relay or Customania's notice), marks it handled, starts one Ops session: courier_quote then courier_book, both with `pickup_time` "19:30" so Uber itself schedules the courier for 7:30 (quote = dry run through the schedule screen; John approves the booking in Studio; cancel in the Uber app). Was: dropped (John, 14:07): order ledger + 7 pm courier pickup run. Parked code: session scratchpad `parked-pickup/` (not in repo). Customania automation stays as is.
 5. Last, only if time: a dashboard. Naïve Studio already shows chats, tool calls and approvals.
 
@@ -58,6 +58,13 @@ A streetwear brand on SF tech humor, run by Naïve agents (`@usenaive-sdk/vetta`
 - **The shop is all clothing:** products, on-model launch shots and lookbook only. No ads in the shop (ads live on X; `/campaigns` stays unlinked, `/hq` may show them).
 - **No hard-coded products or prices:** everything comes from the Stripe catalog and the content store (`launches`, `lookbook`, `banners`), so the site stays current as agents publish.
 - Check every change with screenshots at 1440 px desktop and 390 px mobile before promoting.
+
+## Ad standard (John, Sat 20:25: "as long as we get this type of output consistently on the schedule this works")
+- Reference: https://x.com/hallucinateddpt/status/2119284067032301985 (npm install debt tee, foggy Golden Gate overlook) and the "it was vibe coded / the vibes were wrong" elevator selfie.
+- Every ad: photorealistic, a fictional person WEARING our garment as the centre, a recognizable SF tech-culture moment, print exact, props unbranded, no on-image text except the print (video: burned-in headline + end card). Joke lives in the situation + caption.
+- Pipeline (design-mcp/creative, commit 1574d2f): `ad_concepts` (5 different SF situations, self-scored, best picked) -> `ad_image_generate` best-of-2 (gpt-image-2 + gemini-3-pro-image) -> reviewer hard checks (photorealistic, garment_worn_centre, garment_matches, print_matches, no_extra_text, no_third_party_branding) + quality_score >= 7 enforced in `ad_submit`; video = Veo 3.1 3-beat reveal. Spend guard: <=2 image jobs/concept, <=4/hour.
+- Schedule: Creative every 2 h 09:30-21:30 (video <-> image), Growth posts ads every 1.5 h (ad pillar first), browser replies at :05/:35.
+- Restarts: only after `node agents/safe_to_restart.mjs` exits 0 (held sessions count as busy). Never put the string `agents/serve.mjs` in the same shell command that runs serve.command (its pkill matches the calling shell).
 
 ## /hq mission control (public)
 - **What:** https://hallucinated-store.vercel.app/hq: a projector-first board of what the agents did today: counters, one card per design (trend → designed → CEO decision + reason → store → X → ordered → Customania → pickup), rejected designs featured, live timeline, per-agent columns, "where a human stepped in". Polls `/api/hq` every 30 s.
