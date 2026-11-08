@@ -50,7 +50,8 @@ ok("target: refusals", () => {
   assert.match(targetCheck({ ...base, reply_count: 501 }, ctxOk, noon, L), /replies/);
   assert.match(targetCheck({ ...base, text: "lovely sunset at the beach today" }, ctxOk, noon, L), /SF \/ AI/);
   assert.match(targetCheck(base, { ...ctxOk, ledger: { authors: { 42: {} }, threads: {} } }, noon, L), /one reply per person/);
-  assert.match(targetCheck({ ...base, id: "2" }, { ...ctxOk, ledger: { authors: {}, threads: { 1: {} } } }, noon, L), /this thread/);
+  assert.match(targetCheck(base, { ...ctxOk, ledger: { authors: {}, threads: { 1: {} } } }, noon, L), /this thread/);
+  assert.match(targetCheck({ ...base, id: "2" }, ctxOk, noon, L), /only top-level posts/);
 });
 
 ok("text: good reply passes", () => assert.equal(textCheck("the agent didn't deploy on friday, friday deployed the agent", L), null));

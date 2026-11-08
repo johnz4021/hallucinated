@@ -57,6 +57,21 @@ if (cmd === "login") {
       console.log(`x.com session: ${auth ? `logged in${twid ? ` (twid ${decodeURIComponent(twid.value)})` : ""}, expires ${auth.expires > 0 ? new Date(auth.expires * 1000).toISOString().slice(0, 10) : "with session"}` : "NOT logged in (run x_login.command)"}`);
     } catch (e) { console.log(/already|in use|Singleton/i.test(e.message) ? "x.com session: profile is open in a Chrome window right now (close the x_login window, then check again)" : `x.com session: couldn't read (${e.message.split("\n")[0]})`); }
   }
+} else if (cmd === "naive-status") {
+  // naive_browser_status.command [cmp_id]: set (optional) and check the Naïve hosted browser. Text only.
+  const fs = await import("node:fs");
+  const { createClient } = await import("@usenaive-sdk/vetta");
+  const { naiveCheck } = await import("./naive_browser.mjs");
+  if (rest[0]) { if (!/^cmp_[0-9a-z]+$/i.test(rest[0])) { console.error("computer id looks like cmp_..."); process.exit(1); } st.naive_computer_id = rest[0]; saveBrowserState(ROOT, st); console.log(`saved naive_computer_id ${rest[0]}`); }
+  const env = fs.readFileSync(path.join(ROOT, ".env"), "utf8");
+  const key = (env.match(/^VETTA_API_KEY=(.+)$/m) || [])[1]?.trim().replace(/^["']|["']$/g, "");
+  const v = createClient({ baseUrl: "https://api.vetta.sh", apiKey: key });
+  if (st.naive_computer_id) { const comp = await v.computers.get(st.naive_computer_id).catch(() => null); if (comp?.name && comp.name !== st.naive_computer_name) { st.naive_computer_name = comp.name; saveBrowserState(ROOT, st); } }
+  const r = await naiveCheck(v, st.naive_computer_id, { log: console.log });
+  console.log(`computer ${st.naive_computer_id || "(none)"} (${st.naive_computer_name || "?"}): ${r.ok ? "LOGGED IN as @hallucinateddpt" : "NOT ready"}`);
+  console.log(JSON.stringify(r, null, 2));
+  console.log(`browser replies: ${st.paused ? `paused (${st.reason})` : "on"}`);
+  process.exit(r.ok ? 0 : 1);
 } else if (cmd === "dry") {
   const [url, ...words] = rest, text = words.join(" ") || "test reply, not posted";
   if (!/^https:\/\/(x|twitter)\.com\/[^/]+\/status\/\d+/.test(url || "")) { console.error("usage: dry <https://x.com/<user>/status/<id>> [text]"); process.exit(1); }
@@ -66,6 +81,6 @@ if (cmd === "login") {
   console.log(JSON.stringify(r, null, 2));
   process.exit(r.ok ? 0 : 1);
 } else {
-  console.error("usage: node x/browser_cli.mjs login | pause [reason] | resume | status | dry <url> [text]");
+  console.error("usage: node x/browser_cli.mjs login | pause [reason] | resume | status | naive-status [cmp_id] | dry <url> [text]");
   process.exit(1);
 }

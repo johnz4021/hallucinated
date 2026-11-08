@@ -17,6 +17,7 @@ import { PILLARS, LINK_WINDOW, nextPillar, linkAllowed, hasStoreLink, agentsLogE
 import { loadProposals } from "../designs/ledger.mjs";
 import { flagJohn } from "../agentmail/tools.mjs";
 import { loadBrowserState, saveBrowserState, scheduleCheck, targetCheck, textCheck, endOfPtDay, withBrowserLock, browserReply } from "./browser.mjs";
+import { naiveReply } from "./naive_browser.mjs";
 
 const txt = (o) => ({ content: [{ type: "text", text: JSON.stringify(o, null, 2) }] });
 const err = (m) => ({ isError: true, content: [{ type: "text", text: m }] });
@@ -357,7 +358,7 @@ export function registerXTools(server, ctx) {
 
   server.registerTool("x_browser_reply", {
     title: "Reply to a stranger's post through the browser (about 1 an hour)",
-    description: "Replies to ONE post you found with x_search, as @hallucinateddpt, through the real x.com in John's logged-in Chrome (X's API won't let us reply to people who didn't mention us). Checked in code before anything opens: 09:00-22:00 PT, at least 50 min since the last browser reply, max 13 a day; the post is from your x_search, under 24 h old, public, English, about SF / AI / startups, author under 200k followers, under 500 replies; one reply per person ever and never twice in a thread; the reply has no links, no hashtags, no @-mentions, max 240 characters, and passes the hard lines. If X shows any challenge, warning, rate limit or lock, replies stop for the rest of the day and John is told. Use it at most once per run, on your single best draft; the rest go to x_post_scout.",
+    description: "Replies to ONE post you found with x_search, as @hallucinateddpt, through the real x.com in a browser John logged in to by hand (X's API won't let us reply to people who didn't mention us). Checked in code before anything opens: 09:00-22:00 PT, at least 50 min since the last browser reply, max 13 a day; the post is from your x_search, under 24 h old, public, English, about SF / AI / startups, author under 200k followers, under 500 replies; one reply per person ever and never twice in a thread; the reply has no links, no hashtags, no @-mentions, max 240 characters, and passes the hard lines. If X shows any challenge, warning, rate limit or lock, replies stop for the rest of the day and John is told. Use it at most once per run, on your single best draft; the rest go to x_post_scout.",
     inputSchema: { target_url: z.string().url().describe("the post's URL from x_search"), text: z.string().min(1).max(240), why: z.string().min(5).max(300).describe("one line for the log: why this conversation and why this reply adds something") },
   }, async ({ target_url, text, why }) => {
     try {
@@ -381,14 +382,31 @@ export function registerXTools(server, ctx) {
         return txt({ dry_run: true, would_reply_to: url, text });
       }
       const dry = process.env.X_BROWSER_DRY === "1";
-      const r = await withBrowserLock(() => browserReply({ rootDir: ctx.rootDir, postUrl: url, text, dry, log: ctx.log }));
+      // backend: Naïve's hosted browser (default) or the local Playwright Chrome profile (X_BROWSER_BACKEND=local)
+      const naive = (process.env.X_BROWSER_BACKEND || "naive") !== "local";
+      const verify = async (ids) => {   // the newest of our posts that is a reply to this target
+        for (const rid of ids) { const p = await xGetTweet(keys, rid).catch(() => null); if (p?.referenced?.some((x) => x.type === "replied_to" && x.id === id)) return p.url; }
+        return null;
+      };
+      const r = await withBrowserLock(() => naive
+        ? naiveReply({ v: createClient({ baseUrl: "https://api.vetta.sh", apiKey: ctx.vettaKey }), computerId: st.naive_computer_id, postUrl: url, postText: t.text, text, dry, verify, log: ctx.log })
+        : browserReply({ rootDir: ctx.rootDir, postUrl: url, text, dry, log: ctx.log }));
       const at = new Date().toISOString();
       const s2 = loadBrowserState(ctx.rootDir);
+      if (r.logged_out || r.expired) {   // never log in ourselves: John re-logs in via the Studio live view, then resumes
+        const where = st.naive_computer_name || st.naive_computer_id || "the X browser computer";
+        const what = r.logged_out ? `X shows the browser logged out: log in again via the Studio live view on ${where}` : `the Naïve X browser couldn't be (re)opened on ${where}`;
+        Object.assign(s2, { paused: true, reason: `${what} (${r.reason}); then naive_browser_status.command and resume_browser_replies.command` });
+        saveBrowserState(ctx.rootDir, s2);
+        ctx.log?.(`[x_browser_reply] paused: ${r.reason}`);
+        flagJohn(ctx, { reason: "other", from_agent: "growth (x_browser_reply)", ref: st.naive_computer_id || "no computer", summary: `${r.logged_out ? `Naïve X browser is logged out: log in again via the Studio live view on ${where}` : `Naïve X browser couldn't be reopened on ${where}`} (${r.reason}). Browser replies are paused; after fixing it run naive_browser_status.command, then resume_browser_replies.command.` });
+        return err(`refused: ${r.logged_out ? "the X browser is logged out" : "the X browser couldn't be opened"} (${r.reason}). Browser replies are paused until John fixes it; John was told. Put the draft in x_post_scout.`);
+      }
       if (r.blocked) {
         Object.assign(s2, { paused_until: endOfPtDay(), reason: `X showed: ${r.blocked}` });
         saveBrowserState(ctx.rootDir, s2);
         ctx.log?.(`[x_browser_reply] STOPPED for today: ${r.blocked}`);
-        flagJohn(ctx, { reason: "other", from_agent: "growth (x_browser_reply)", ref: url, summary: `X showed "${r.blocked}" on a browser reply. Browser replies are paused for the rest of the day; check the account in the X profile (x_login.command) before resuming.` });
+        flagJohn(ctx, { reason: "other", from_agent: "growth (x_browser_reply)", ref: url, summary: `X showed "${r.blocked}" on a browser reply. Browser replies are paused for the rest of the day; check @hallucinateddpt (Naïve Studio live view) before resuming with resume_browser_replies.command.` });
         return err(`stopped: X showed ${r.blocked}. Browser replies are paused for the rest of today and John was told; don't retry.`);
       }
       if (!r.ok) {

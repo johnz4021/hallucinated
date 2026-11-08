@@ -62,6 +62,7 @@ export function targetCheck(t, { me, seenInSearch, ledger }, now = new Date(), L
   if (!t.created_at || now - new Date(t.created_at) > L.maxAgeH * 3600_000) return `post is older than ${L.maxAgeH} h`;
   if ((t.followers || 0) > L.maxFollowers) return `author has ${t.followers} followers (limit ${L.maxFollowers}: viral reply-guy zone)`;
   if ((t.reply_count || 0) > L.maxReplies) return `post already has ${t.reply_count} replies (limit ${L.maxReplies})`;
+  if (t.conversation_id && t.conversation_id !== t.id) return "only top-level posts (this one is a reply inside a thread)";
   if (!ON_TOPIC.test(String(t.text || ""))) return "post isn't about SF / AI / startups";
   if (ledger.authors?.[t.author_id]) return `we already replied to @${t.author} once (one reply per person, ever)`;
   if (t.conversation_id && ledger.threads?.[t.conversation_id]) return "we already replied in this thread";
