@@ -14,7 +14,11 @@ lines = ["# Hallucinated media library\n"]
 def get(url, path):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     if not os.path.exists(path):
-        urllib.request.urlretrieve(url, path)
+        try:
+            urllib.request.urlretrieve(url, path)
+        except Exception as e:
+            print(f"skip {url[:90]}: {e}")
+            return None
     return path
 
 def ext_of(url, default=".png"):
@@ -69,6 +73,7 @@ for coll, folder in (("lookbook", "on-model/lookbook"), ("launches", "on-model/l
             if "/api/mockup" in u: continue
             sub = f"{folder}/{key}" if coll == "launches" else folder
             p = get(u, f"{L}/{sub}/{key}_{i}{ext_of(u)}")
+            if not p: continue
             lines.append(f"- [{os.path.relpath(p, L)}]({os.path.relpath(p, L)}) {(it.get('caption') or it.get('title') or it.get('alt') or '')[:120]}")
 
 # 3. product images from the live catalog (mockups rendered by the store)
@@ -79,9 +84,10 @@ for slug in dict.fromkeys(slugs):
         html = urllib.request.urlopen(f"{STORE}/p/{slug}").read().decode("utf8", "ignore")
     except Exception:
         continue
-    imgs = list(dict.fromkeys(re.findall(r'https://[^"\s]+?\.(?:png|jpe?g|webp)', html)))[:4]
+    imgs = [u for u in dict.fromkeys(re.findall(r'https://[^"\s&;]+?\.(?:png|jpe?g|webp)', html)) if "%" not in u][:4]
     for i, u in enumerate(imgs):
         p = get(u, f"{L}/products/{slug}/{slug}_{i}{ext_of(u)}")
+        if not p: continue
         lines.append(f"- [{os.path.relpath(p, L)}]({os.path.relpath(p, L)})")
 
 open(f"{L}/INDEX.md", "w").write("\n".join(lines) + "\n")
