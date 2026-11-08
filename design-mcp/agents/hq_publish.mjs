@@ -38,11 +38,11 @@ const ASK = new Set(["customania_handoff_payment", "courier_book", "charge_preor
 // tools whose outputs we keep in the cache (things that changed something outside, plus what explains them)
 const KEEP = new Set(["generate_design", "propose_design", "ceo_decide", "x_post", "x_reply", "customania_checkout", "customania_handoff_payment",
   "customania_payment_status", "courier_quote", "courier_status", "courier_book", "inbox_reply", "sales_batch_start", "sales_batch_abort",
-  "set_plan", "ops_courier_request", "charge_preorders", "ad_submit"]);
+  "set_plan", "ops_courier_request", "charge_preorders", "ad_submit", "x_browser_reply", "ad_image_generate", "ad_video_compose", "ad_review_status"]);
 // args kept per tool (whitelist: checkout args carry the founder's name and the inbox address, so only sizes survive)
 const ARGS = { generate_design: ["text", "placement"], propose_design: ["design_id", "title", "slug"], ceo_decide: ["proposal_id", "decision", "reason"],
   customania_checkout: ["sizes"], customania_handoff_payment: ["amount_due"], courier_book: ["order_number", "max_price_usd", "pickup_time"],
-  courier_quote: ["order_number", "pickup_time"], ad_video_start: ["model"], generate_image: ["model"], sales_batch_abort: ["reason"], ops_courier_request: ["order_number"] };
+  courier_quote: ["order_number", "pickup_time"], ad_video_start: ["model"], ad_submit: ["review_id", "kind"], ad_review: ["kind"], x_browser_reply: ["target_url"], generate_image: ["model"], sales_batch_abort: ["reason"], ops_courier_request: ["order_number"] };
 
 // ---- privacy ------------------------------------------------------------------------------------------------------
 const URL_RE = /https?:\/\/[^\s"'<>\]]+/g;
@@ -129,7 +129,7 @@ function compact(e) {
     if (n === "set_plan" && Array.isArray(d.args?.themes)) a.themes_n = d.args.themes.length;
     return { t: e.type === "tool.started" ? "ts" : "cf", seq: e.seq, at, n, id: d.tool_call_id, a };
   }
-  if (e.type === "tool.completed") { const n = stripPrefix(d.name); return { t: "tc", seq: e.seq, at, n, id: d.tool_call_id, err: !!d.is_error, o: KEEP.has(n) ? String(d.output ?? "").slice(0, 3000) : "" }; }
+  if (e.type === "tool.completed") { const n = stripPrefix(d.name); return { t: "tc", seq: e.seq, at, n, id: d.tool_call_id, err: !!d.is_error, o: KEEP.has(n) ? String(d.output ?? "").slice(0, 3000) : d.is_error ? String(d.output ?? "").slice(0, 200) : "" }; }
   if (e.type === "message.completed" && d.role === "assistant") return { t: "m", seq: e.seq, at, c: String(d.content ?? "").slice(0, 4000) };
   if (e.type === "session.idle") return { t: "idle", seq: e.seq, at, r: d.stop_reason || null };
   return null;
@@ -139,12 +139,15 @@ const is429 = (e) => e?.status === 429 || /429|at capacity|rate limit/i.test(Str
 // Gentle on Naïve (it returns 429 "at capacity" under load): agents + deployments cached 5 min, ONE sessions.list per
 // push (more pages only on a cold cache or a burst of new sessions), events only for sessions whose last_seq moved
 // (running ones first, at most 12 a push). Any 429 keeps the last known state.
-async function syncSessions(v, cache) {
+async function syncSessions(v, cache, { budgetMs = 15_000 } = {}) {
+  const deadline = Date.now() + budgetMs;
+  const left = () => Math.max(1000, Math.min(10_000, deadline - Date.now()));
+  const late = () => Date.now() > deadline;
   const meta = cache.meta ||= { at: 0, agents: [], deployments: [] };
-  if (Date.now() - (meta.at || 0) > 5 * 60_000 || !meta.agents.length) {
+  if (Date.now() - (meta.at || 0) > 5 * 60_000 || !meta.agents.length || meta.agents.some((a) => !("model" in a))) {
     try {
-      const [ag, dep] = await Promise.all([withTimeout(v.agents.list({ limit: 100 }), 20_000, "agents.list"), withTimeout(v.deployments.list({ limit: 100 }), 20_000, "deployments.list")]);
-      meta.agents = (ag.data || []).filter((a) => /^hallucinated-/.test(a.name)).map((a) => ({ id: a.id, name: a.name }));
+      const [ag, dep] = await Promise.all([withTimeout(v.agents.list({ limit: 100 }), left(), "agents.list"), withTimeout(v.deployments.list({ limit: 100 }), left(), "deployments.list")]);
+      meta.agents = (ag.data || []).filter((a) => /^hallucinated-/.test(a.name)).map((a) => ({ id: a.id, name: a.name, model: a.model || null }));
       meta.deployments = (dep.data || []).filter((d) => meta.agents.some((a) => a.id === d.agent_id))
         .map((d) => ({ id: d.id, agent_id: d.agent_id, cron: d.cron, timezone: d.timezone, enabled: !!d.enabled, schedule_status: d.schedule_status, next_run_at: d.next_run_at }));
       meta.at = Date.now();
@@ -155,7 +158,8 @@ async function syncSessions(v, cache) {
   const listed = [];
   let after;
   for (let page = 0; page < (cold ? 15 : 5); page++) {
-    const r = await withTimeout(v.sessions.list({ limit: 100, ...(after ? { after } : {}) }), 20_000, "sessions.list");
+    if (page > 0 && late()) break;
+    const r = await withTimeout(v.sessions.list({ limit: 100, ...(after ? { after } : {}) }), left(), "sessions.list");
     const data = r.data || [];
     listed.push(...data.filter((s) => s.created_at >= CUTOFF));
     // stop at the cutoff, or (warm cache) as soon as the page reaches sessions we already know
@@ -165,7 +169,7 @@ async function syncSessions(v, cache) {
   const have = new Set(listed.map((s) => s.id));
   // seeds once; cached sessions that looked active but fell off the page: re-read a few
   const stale = Object.values(cache.sessions).filter((c) => !have.has(c.id) && ["running", "queued"].includes(c.status)).slice(0, 3).map((c) => c.id);
-  const extra = await Promise.all([...SEED_IDS.filter((id) => !cache.sessions[id] && !have.has(id)), ...stale].map((id) => withTimeout(v.sessions.get(id), 20_000, "sessions.get").catch(() => null)));
+  const extra = await Promise.all([...SEED_IDS.filter((id) => !cache.sessions[id] && !have.has(id)), ...stale].map((id) => late() ? null : withTimeout(v.sessions.get(id), left(), "sessions.get").catch(() => null)));
   const todo = [];
   for (const s of [...listed, ...extra.filter(Boolean)]) {
     const agent = nameOf[s.agent_id] || cache.sessions[s.id]?.agent || null;
@@ -180,11 +184,12 @@ async function syncSessions(v, cache) {
   todo.sort((a, b) => (["running", "queued"].includes(b.status) - ["running", "queued"].includes(a.status)) || String(b.created_at).localeCompare(String(a.created_at)));
   let fetched = 0, limited = false;
   await pool(todo.slice(0, 12), 3, async (c) => {
-    if (limited) return;
+    if (limited || late()) return;
     let after_seq = c.last_seq, done = false;
     try {
       for (let page = 0; page < 30; page++) {
-        const r = await withTimeout(v.sessions.events(c.id, { after_seq, limit: 100 }), 20_000, "sessions.events");
+        if (page > 0 && late()) break;
+        const r = await withTimeout(v.sessions.events(c.id, { after_seq, limit: 100 }), left(), "sessions.events");
         const data = r.data || [];
         for (const e of data) { const x = compact(e); if (x) c.events.push(x); fetched++; }
         if (data.length) after_seq = Math.max(after_seq, ...data.map((e) => e.seq));
@@ -357,7 +362,12 @@ export function humanSchedule(crons) {
   const g = gaps[0], even = gaps.every((x) => x === g);
   const every = g < 60 ? `every ${g} min` : g === 60 ? "hourly" : `every ${+(g / 60).toFixed(1)}h`;
   if (even && t.length * g === 1440) return `${every} · all day`;
-  return `${even ? every : `${t.length}× a day`} · ${hm(t[0])}–${hm(t.at(-1))}`;
+  if (!even) {
+    const avg = Math.round((t.at(-1) - t[0]) / (t.length - 1));
+    const lbl = avg < 60 ? `~every ${avg} min` : `~every ${+(avg / 60).toFixed(1)}h`;
+    return `${lbl} · ${t.at(-1) - t[0] >= 23 * 60 ? "all day" : `${hm(t[0])}–${hm(t.at(-1))}`}`;
+  }
+  return `${every} · ${hm(t[0])}–${hm(t.at(-1))}`;
 }
 
 function buildV2({ rootDir, cache, sessions, derived, stripe, xl, liveProposals, d1, human, timeline }) {
@@ -376,27 +386,27 @@ function buildV2({ rootDir, cache, sessions, derived, stripe, xl, liveProposals,
 
   // things each agent shipped (outside effects), newest last
   const ship = [];
-  const S = (agent, at, text, url = null, thumb = null) => at && ship.push({ agent, at, text: clip(plain(text), 80), url: pub(url), thumb: pub(thumb) });
+  const S = (agent, at, text, url = null, thumb = null, kind = null, status = null) => at && ship.push({ agent, at, text: clip(plain(text), 80), url: pub(url), thumb: pub(thumb), kind, status });
   for (const p of liveProposals) {
-    S("product", p.proposed_at, `Proposed "${p.title}"`, p.publish?.url, p.publish?.mockup_url || cache.art[p.design_id]);
-    if (p.state === "published") S("ceo", p.publish?.published_at || p.decision?.at, `Approved and published "${p.title}"`, p.publish?.url, p.publish?.mockup_url);
-    else if (p.state === "rejected" && p.decision?.at) S("ceo", p.decision.at, `Rejected "${p.title}"`, null, cache.art[p.design_id]);
+    S("product", p.proposed_at, `Proposed "${p.title}"`, p.publish?.url, p.publish?.mockup_url || cache.art[p.design_id], "design", p.state === "published" ? "live" : p.state === "rejected" ? "rejected" : "proposed");
+    if (p.state === "published") S("ceo", p.publish?.published_at || p.decision?.at, `Approved and published "${p.title}"`, p.publish?.url, p.publish?.mockup_url, "verdict", "approved");
+    else if (p.state === "rejected" && p.decision?.at) S("ceo", p.decision.at, `Rejected "${p.title}"`, null, cache.art[p.design_id], "verdict", "rejected");
   }
-  S("product", d1.stages.designed.at, `Designed drop #1: "${d1.title}"`, d1.stages.live?.url, d1.artwork_url);
-  S("ceo", d1.stages.ceo.at, "Approved drop #1 for print", d1.stages.live?.url, d1.artwork_url);
-  for (const p of plans) S("ceo", p.at, `Set the plan${p.plan?.themes?.length ? ` (${p.plan.themes.length} themes)` : ""}`);
-  for (const a of liveAds) S("creative", a.created_at, `Made ${a.kind === "video" ? "a video" : "an image"} ad${a.format ? ` (${String(a.format).replace(/_/g, " ")})` : ""}`, null, a.kind === "video" ? a.poster_url : a.media_url);
+  S("product", d1.stages.designed.at, `Designed drop #1: "${d1.title}"`, d1.stages.live?.url, d1.artwork_url, "design", "shipped");
+  S("ceo", d1.stages.ceo.at, "Approved drop #1 for print", d1.stages.live?.url, d1.artwork_url, "verdict", "approved");
+  for (const p of plans) S("ceo", p.at, `Set the plan${p.plan?.themes?.length ? ` (${p.plan.themes.length} themes)` : ""}`, null, null, "plan", null);
+  for (const a of liveAds) S("creative", a.created_at, `Made ${a.kind === "video" ? "a video" : "an image"} ad${a.format ? ` (${String(a.format).replace(/_/g, " ")})` : ""}`, a.x_url || a.posted?.url || null, a.kind === "video" ? a.poster_url : a.media_url, "ad", a.state || null);
   const adByReview = Object.fromEntries(Object.values(ads.ads || {}).filter((a) => a.review_id).map((a) => [a.review_id, a]));
-  for (const r of liveReviews.filter((r) => r.done_at)) { const a = adByReview[r.review_id]; S("reviewer", r.done_at, r.pass ? "Passed an ad" : "Sent an ad back", null, a ? (a.kind === "video" ? a.poster_url : a.media_url) : null); }
-  for (const p of posts) S("growth", p.at, p.text || "Posted on X", X_URL(p.id), p.media);
-  for (const p of replies) S("growth", p.at, p.kind === "browser_reply" ? "Replied to a post on X" : "Replied to a mention", p.id ? X_URL(p.id) : null);
+  for (const r of liveReviews.filter((r) => r.done_at)) { const a = adByReview[r.review_id]; S("reviewer", r.done_at, r.pass ? "Passed an ad" : "Sent an ad back", null, a ? (a.kind === "video" ? a.poster_url : a.media_url) : null, "verdict", r.pass ? "passed" : "rejected"); }
+  for (const p of posts) S("growth", p.at, p.text || "Posted on X", X_URL(p.id), p.media, "post", p.pillar || null);
+  for (const p of replies) S("growth", p.at, p.kind === "browser_reply" ? "Replied to a post on X" : "Replied to a mention", p.id ? X_URL(p.id) : null, null, "reply", p.kind === "browser_reply" ? "browser" : "mention");
   for (const c of sessions) {
     const d = derived[c.id];
     if (!d || d.dry || (c.events || []).some((e) => e.t === "tc" && /cs_test_/.test(e.o))) continue;
-    for (const p of d.facts.paid) S("ops", p.at, `Customania print order ${p.order} placed (founder paid)`);
-    for (const x of d.facts.courier.filter((x) => x.booked)) S("ops", x.at, `Booked a courier pickup to YC${x.price ? ` ($${x.price.toFixed(2)})` : ""}`);
+    for (const p of d.facts.paid) S("ops", p.at, `Customania print order ${p.order} placed (founder paid)`, null, null, "order", "paid");
+    for (const x of d.facts.courier.filter((x) => x.booked)) S("ops", x.at, `Booked a courier pickup to YC${x.price ? ` ($${x.price.toFixed(2)})` : ""}`, null, null, "pickup", "booked");
   }
-  for (const t of timeline.filter((t) => t.agent === "support" && notDry(t) && t.kind === "email")) S("support", t.at, t.text);
+  for (const t of timeline.filter((t) => t.agent === "support" && notDry(t) && t.kind === "email")) S("support", t.at, t.text, null, null, "email", null);
   ship.sort((a, b) => a.at.localeCompare(b.at));
 
   // agents
@@ -471,8 +481,144 @@ function buildV2({ rootDir, cache, sessions, derived, stripe, xl, liveProposals,
     ...human.map((h) => ({ at: h.at, agent: "founder", text: h.text }))]
     .sort((a, b) => b.at.localeCompare(a.at)).slice(0, 30).map((f) => ({ ...f, text: clip(f.text, 90) }));
   void xb;
-  return { v2: { money, agents, flows, feed }, anyRunning };
+  return { v2: { money, agents, flows, feed }, anyRunning, ship };
 }
+
+// ---- v3: per-agent drill-down (hq-agents.json) ------------------------------------------------------------------------
+// The agents doc goes to PUT /api/admin/hq?doc=agents once the store has that route; until then it is only written
+// locally (<root>/hq-agents.json). The route is live on production (fe996e2).
+const AGENTS_DOC_PUSH = true;
+const AGENTS_DOC_MAX = 1_500_000;
+// tool -> [label (<=20 chars), icon]
+const TOOL_META = {
+  x_search: ["X search", "search"], trends: ["Trends", "trends"], generate_design: ["Design", "design"], next_design_style: ["Design style", "design"],
+  propose_design: ["Propose design", "check"], ceo_decide: ["Decide", "check"], get_plan: ["Read plan", "plan"], set_plan: ["Set plan", "plan"],
+  store_stats: ["Store stats", "store"], x_stats: ["X stats", "post"], agents_log: ["Agents log", "plan"], store_catalog: ["Catalog", "catalog"],
+  store_link: ["Store link", "store"], store_new_designs: ["New designs", "store"], growth_next_pillar: ["Next post", "plan"],
+  x_post: ["Post on X", "post"], x_mentions: ["Mentions", "reply"], x_reply: ["Reply", "reply"], x_post_scout: ["Scout draft", "reply"], x_browser_reply: ["Browser reply", "browser"],
+  next_ad_format: ["Ad format", "plan"], ad_concepts: ["Ad concepts", "plan"], ad_image_generate: ["Ad image", "image"], ad_image_status: ["Image status", "image"],
+  generate_image: ["Generate image", "image"], ad_video_start: ["Video", "video"], ad_video_status: ["Video status", "video"], ad_video_compose: ["Compose video", "video"],
+  ad_review: ["Send to review", "review"], ad_review_status: ["Review result", "review"], ad_submit: ["Publish ad", "check"], view_image: ["Look at ad", "review"],
+  customania_start: ["Open order", "store"], customania_upload: ["Upload print", "design"], customania_place: ["Place print", "design"], customania_checkout: ["Checkout", "money"],
+  customania_pay: ["Pay", "money"], customania_handoff_payment: ["Payment handoff", "money"], customania_payment_status: ["Payment status", "money"], customania_close: ["Close order", "store"],
+  issue_card: ["Issue card", "money"], courier_quote: ["Courier quote", "courier"], courier_book: ["Book courier", "courier"], courier_status: ["Courier status", "courier"],
+  stripe_orders: ["Store orders", "money"], sales_batch_start: ["Batch orders", "money"], stripe_mark_batched: ["Mark batched", "money"], sales_batch_abort: ["Abort batch", "money"],
+  preorders_list: ["Pre-orders", "money"], charge_preorders: ["Charge pre-orders", "money"], charge_preorders_status: ["Charge status", "money"],
+  inbox_list: ["Inbox", "inbox"], inbox_read: ["Read email", "inbox"], inbox_reply: ["Reply email", "mail"], inbox_mark_handled: ["Mark handled", "inbox"],
+  ops_courier_request: ["Courier request", "courier"], preorder_cancel: ["Cancel pre-order", "money"], preorder_send_payment_link: ["Payment link", "mail"],
+  flag_john: ["Flag founder", "flag"],
+};
+const toolMeta = (n) => { const m = TOOL_META[n]; return m ? { label: m[0], icon: m[1] } : { label: clip(String(n || "tool").replace(/^.*\./, "").replace(/_/g, " "), 20), icon: "other" }; };
+const PRIVATE_ROLES = new Set(["ops", "support"]);
+let defsCache = null;
+const defsModel = {};
+async function grantedTools() {
+  if (defsCache) return defsCache;
+  try {
+    const { agentDefs } = await import("./defs.mjs");
+    const defs = agentDefs({ live: false, trendsAllow: true });
+    for (const [k, d] of Object.entries(defs)) if (d.model) defsModel[k] = d.model;
+    defsCache = Object.fromEntries(Object.entries(defs).map(([k, d]) => [k, [
+      ...Object.entries(d.tools || {}).filter(([, perm]) => perm && perm !== "off").map(([n, perm]) => ({ name: n, ...toolMeta(n), permission: perm === "ask" ? "ask" : "allow" })),
+      ...Object.entries(d.builtins || {}).filter(([, c]) => c?.enabled).map(([n, c]) => ({ name: n, ...toolMeta(n), permission: c.permission === "ask" ? "ask" : "allow" })),
+    ]]));
+  } catch { defsCache = {}; }
+  return defsCache;
+}
+
+function buildAgentsDoc({ rootDir, cache, sessions, derived, ship, v2agents, d1, proposalsAll }) {
+  const meta = cache.meta || { agents: [], deployments: [] };
+  const ads = readJson(path.join(rootDir, "ads.json"), { ads: {}, reviews: {} });
+  const adList = Object.values(ads.ads || {});
+  const reviewSessions = new Set(Object.values(ads.reviews || {}).map((r) => r.session).filter(Boolean));
+  const ceoHandoff = new Set(proposalsAll.map((p) => p.ceo_session).filter(Boolean));
+  const opsHandoff = new Set(Object.values(readJson(path.join(rootDir, "courier-requests.json"), {})).map((r) => r?.ops_session).filter(Boolean));
+  const xl = readJson(path.join(rootDir, "x-ledger.json"), { posts: [] });
+  const pub = (u) => (typeof u === "string" && /^https:\/\//.test(u) && !/trycloudflare|localhost/.test(u) ? u : null);
+  const thumbOfAd = (a) => pub(a?.kind === "video" ? a.poster_url || null : a?.media_url);
+  const designThumb = (id) => {
+    if (id === DROP1.design_id) return d1.artwork_url;
+    const p = proposalsAll.find((x) => x.design_id === id && x.mode === "live");
+    return pub(p?.publish?.mockup_url) || pub(cache.art[id]) || null;
+  };
+  const near = (list, at, ms, key = "at") => list.find((x) => x[key] && Math.abs(Date.parse(x[key]) - Date.parse(at)) <= ms) || null;
+  const out = {};
+  for (const a of v2agents) {
+    const key = a.key;
+    const agentMeta = meta.agents.find((x) => x.name === `hallucinated-${key}`);
+    const deps = meta.deployments.filter((d) => d.agent_id === agentMeta?.id);
+    const cronMins = deps.flatMap((d) => cronTimes(d.cron));
+    const ptMin = (iso) => { const p = new Intl.DateTimeFormat("en-US", { timeZone: "America/Los_Angeles", hour: "numeric", minute: "numeric", hour12: false }).formatToParts(new Date(iso)); const g = (t) => Number(p.find((x) => x.type === t)?.value || 0); return (g("hour") % 24) * 60 + g("minute"); };
+    const ses = sessions.filter((c) => String(c.agent || "").replace(/^hallucinated-/, "") === key).sort((x, y) => String(y.created_at).localeCompare(String(x.created_at))).slice(0, 15);
+    const runs = ses.map((c) => {
+      const ev = [...(c.events || [])].sort((x, y) => x.seq - y.seq);
+      const done = new Map(ev.filter((e) => e.t === "tc").map((e) => [e.id, e]));
+      const raw = [];
+      for (const e of ev.filter((e) => e.t === "ts")) {
+        const tc = done.get(e.id);
+        if (tc && /waiting for approval/.test(tc.o)) continue;   // Naïve's hold: the call is re-issued later
+        const o = tc ? parseJ(tc.o) || {} : {};
+        const ok = !!tc && !tc.err;
+        const m = toolMeta(e.n);
+        let summary = "", url = null, thumb = null;
+        const at = e.at;
+        switch (e.n) {
+          case "generate_design": if (o.id) { summary = `Design ${o.id}${o.text_seen ? `: "${clip(o.text_seen, 50)}"` : ""}, QA ${o.pass ? "pass" : "fail"}`; thumb = designThumb(o.id); } break;
+          case "propose_design": summary = ok ? `Proposed "${e.a.title || e.a.slug || "a design"}"` : `Refused: "${e.a.title || e.a.slug || "a design"}"`; break;
+          case "ceo_decide": summary = `${e.a.decision === "approve" ? "Approved" : e.a.decision === "reject" ? "Rejected" : "Decided"}: ${plain(e.a.reason || "")}`; if (o.url) url = o.url; break;
+          case "x_post": { const id = o.id || near(xl.posts.filter((p) => p.kind === "post" && p.id), at, 15_000)?.id; if (ok && id && !/^dry-/.test(String(id))) { url = X_URL(id); summary = plain(o.text || xl.posts.find((p) => p.id === id)?.text || "Posted on X"); } break; }
+          case "x_reply": if (ok && o.id) { url = X_URL(o.id); summary = "Replied to a mention"; } break;
+          case "x_browser_reply": if (ok) { const r = near(xl.posts.filter((p) => p.kind === "browser_reply"), at, 120_000); summary = "Replied to a post on X"; if (r?.id) url = X_URL(r.id); } break;
+          case "ad_submit": { const ad = (e.a.review_id && adList.find((x) => x.review_id === e.a.review_id)) || near(adList, at, 120_000, "created_at"); if (ok) { summary = `Published ${ad?.kind === "video" ? "a video" : "an"} ad${ad?.format ? ` (${String(ad.format).replace(/_/g, " ")})` : ""}`; thumb = thumbOfAd(ad); url = pub(ad?.x_url) || null; } break; }
+          case "customania_checkout": summary = ok ? `Cart verified${o.total ? `, $${o.total}` : ""}` : ""; break;
+          case "courier_status": if (o.status === "completed" && o.result) summary = o.result.booked ? `Courier booked${money(o.result.price) ? ` ($${money(o.result.price).toFixed(2)})` : ""}` : `Quote${money(o.result.price) ? ` $${money(o.result.price).toFixed(2)}` : ""}`; break;
+        }
+        if (!summary && !ok) summary = tc ? (PRIVATE_ROLES.has(c.role) || !tc.o ? "failed" : clip(plain(tc.o), 100)) : "no result";
+        raw.push({ at, tool: e.n, label: m.label, icon: m.icon, ok, summary, url: pub(url), thumb: pub(thumb) });
+      }
+      // collapse consecutive repeats of the same tool (keep the last link/thumb, ok = the last call's)
+      const steps = [];
+      for (const st of raw) {
+        const prev = steps.at(-1);
+        if (prev && prev.tool === st.tool && !st.url && !st.thumb && !prev.url && !prev.thumb) {
+          prev.n += 1; prev.fails += st.ok ? 0 : 1; prev.ok = st.ok; prev.summary = st.summary; continue;
+        }
+        steps.push({ ...st, n: 1, fails: st.ok ? 0 : 1 });
+      }
+      for (const st of steps) {
+        if (st.n > 1) {
+          st.label = clip(`${st.label} ×${st.n}`, 24);
+          if (st.fails && st.ok) st.summary = `${st.fails} of ${st.n} failed, then ok${st.summary ? `: ${st.summary}` : ""}`;
+          else if (st.fails === st.n && st.summary === "failed") st.summary = `all ${st.n} failed`;
+        }
+        delete st.n; delete st.fails; st.summary = clip(st.summary, 100);
+      }
+      const idle = [...ev].reverse().find((e) => e.t === "idle");
+      const running = ["running", "queued"].includes(c.status);
+      const status = running ? "running" : c.status === "failed" || c.stop_reason === "error" ? "failed" : c.status === "cancelled" ? "cancelled"
+        : /awaiting_(approval|answer|input)/.test(c.stop_reason || "") ? "waiting_human" : "done";
+      const mins = c.created_at ? ptMin(c.created_at) : -1;
+      const fromCron = c.deployment_id === undefined && cronMins.some((m) => Math.abs(mins - m) <= 2);
+      const trigger = c.deployment_id || fromCron ? "schedule" : key === "reviewer" || reviewSessions.has(c.id) || ceoHandoff.has(c.id) || opsHandoff.has(c.id) ? "handoff" : "manual";
+      const r = resultOf(c);
+      const d = derived[c.id];
+      return {
+        id: c.id, started_at: c.started_at || c.created_at, ended_at: running ? null : idle?.at || null, status, trigger,
+        spend_usd: c.spend_micro != null ? Math.round(c.spend_micro / 1e4) / 100 : null,
+        result: r ? clip(resultText(r, c.role) || "", 140) || null : null,
+        ...(d?.dry ? { dry_run: true } : {}),
+        steps: steps.slice(0, 25),
+      };
+    });
+    const shipped = ship.filter((x) => x.agent === key).sort((x, y) => y.at.localeCompare(x.at)).slice(0, 24)
+      .map((x) => ({ at: x.at, kind: x.kind || "post", title: x.text, url: x.url, thumb: x.thumb, status: x.status ?? null }));
+    const model = agentMeta?.model || defsModel[key] || (key === "reviewer" ? REVIEWER_MODEL_FALLBACK : null);
+    out[key] = { key, name: a.name, role: a.role, model: model ? String(model).split("/").pop() : null, schedule: a.schedule, next_run_at: a.next_run_at,
+      tools: (defsCache || {})[key] || [], shipped, runs };
+  }
+  return { version: 1, generated_at: new Date().toISOString(), agents: out };
+}
+const REVIEWER_MODEL_FALLBACK = "google/gemini-3-flash-preview";
 
 // ---- Stripe (live, read-only) --------------------------------------------------------------------------------------
 async function liveStripe(rootDir) {
@@ -698,16 +844,31 @@ export async function buildHq({ rootDir = DEFAULT_ROOT, uploadArt = false, log =
     timeline: tl.slice(0, 200).map(({ session, ...t }) => t),
     human: humanSorted,
   };
-  const { v2, anyRunning } = buildV2({ rootDir, cache, sessions: naive.sessions, derived, stripe, xl, d1, human: humanSorted, timeline: tl,
+  await grantedTools();
+  const { v2, anyRunning, ship } = buildV2({ rootDir, cache, sessions: naive.sessions, derived, stripe, xl, d1, human: humanSorted, timeline: tl,
     liveProposals: Object.values(readJson(path.join(rootDir, "design-proposals.json"), { proposals: {} }).proposals || {}).filter((p) => p.mode === "live" && !["abandoned"].includes(p.state)) });
   Object.assign(doc, v2);
+  const proposalsAll = Object.values(readJson(path.join(rootDir, "design-proposals.json"), { proposals: {} }).proposals || {});
+  let agentsJson = null;
+  try {
+    const agentsDoc = scrub(buildAgentsDoc({ rootDir, cache, sessions: naive.sessions, derived, ship, v2agents: v2.agents, d1, proposalsAll }));
+    // trim to budget: fewer steps, then fewer runs
+    agentsJson = JSON.stringify(agentsDoc);
+    for (const [maxRuns, maxSteps] of [[15, 15], [10, 12], [6, 10], [4, 8]]) {
+      if (agentsJson.length <= AGENTS_DOC_MAX) break;
+      for (const ag of Object.values(agentsDoc.agents)) { ag.runs = ag.runs.slice(0, maxRuns); for (const r of ag.runs) r.steps = r.steps.slice(0, maxSteps); }
+      agentsJson = JSON.stringify(agentsDoc);
+    }
+    assertClean(agentsJson);
+    if (agentsJson.length > AGENTS_DOC_MAX) throw new Error(`hq-agents.json is ${agentsJson.length} bytes`);
+  } catch (e) { warn.push(`agents doc: ${e.message}`); agentsJson = null; }
   const clean = scrub(doc);
   const json = JSON.stringify(clean);
   assertClean(json);
   if (json.length > MAX_BYTES) throw new Error(`hq.json is ${json.length} bytes (limit ${MAX_BYTES})`);
   writeJson(cacheFile, cache);
   if (naive.limited) warn.push("naive: 429, kept the last known state");
-  return { doc: clean, json, cache, cacheFile, store, warn, anyRunning, fetched: naive.fetched, sessions: naive.sessions.length, ms: Date.now() - t0 };
+  return { doc: clean, json, agentsJson, cache, cacheFile, store, warn, anyRunning, fetched: naive.fetched, sessions: naive.sessions.length, ms: Date.now() - t0 };
 }
 
 // serve calls this (every 30 s while an agent runs, else 60 s: `running` in the result). Skips the upload when nothing
@@ -715,15 +876,25 @@ export async function buildHq({ rootDir = DEFAULT_ROOT, uploadArt = false, log =
 export async function publishHq({ rootDir = DEFAULT_ROOT, dry = false, force = false, log = () => {} } = {}) {
   const b = await buildHq({ rootDir, uploadArt: !dry, log });
   const hash = crypto.createHash("sha256").update(JSON.stringify({ ...b.doc, generated_at: null })).digest("hex");
+  if (b.agentsJson && (dry || !AGENTS_DOC_PUSH)) fs.writeFileSync(path.join(rootDir, "hq-agents.json"), b.agentsJson);
   if (dry) { fs.writeFileSync(path.join(rootDir, "hq.json"), JSON.stringify(b.doc, null, 2)); return { dry: true, running: b.anyRunning, bytes: b.json.length, events: b.doc.timeline.length, ms: b.ms, fetched: b.fetched, warn: b.warn }; }
   if (!b.store) throw new Error("STORE_ADMIN_SECRET is not in .env");
   const last = b.cache.last_push;
-  if (!force && last?.hash === hash && Date.now() - Date.parse(last.at) < 5 * 60_000) return { skipped: true, running: b.anyRunning, ms: b.ms, warn: b.warn };
+  // the agents doc: its own hash, never blocks the main push
+  let agentsPushed = false;
+  if (AGENTS_DOC_PUSH && b.agentsJson) {
+    const ah = crypto.createHash("sha256").update(b.agentsJson.replace(/"generated_at":"[^"]*"/, "")).digest("hex");
+    if (force || b.cache.last_agents_push?.hash !== ah || Date.now() - Date.parse(b.cache.last_agents_push?.at || 0) > 5 * 60_000) {
+      try { await b.store("PUT", "/api/admin/hq?doc=agents", { body: b.agentsJson, type: "application/json" }); agentsPushed = true; b.cache.last_agents_push = { hash: ah, at: new Date().toISOString() }; writeJson(b.cacheFile, b.cache); }
+      catch (e) { b.warn.push(`agents doc push: ${e.message}`); }
+    }
+  }
+  if (!force && last?.hash === hash && Date.now() - Date.parse(last.at) < 5 * 60_000) return { skipped: true, agentsPushed, running: b.anyRunning, ms: b.ms, warn: b.warn };
   const r = await b.store("PUT", "/api/admin/hq", { json: b.doc });
   const cache = readJson(b.cacheFile, b.cache);
   cache.last_push = { hash, at: new Date().toISOString() };
   writeJson(b.cacheFile, cache);
-  return { pushed: true, running: b.anyRunning, bytes: r.bytes ?? b.json.length, events: b.doc.timeline.length, snapshot: r.snapshot ?? null, ms: b.ms, fetched: b.fetched, warn: b.warn };
+  return { pushed: true, agentsPushed, running: b.anyRunning, bytes: r.bytes ?? b.json.length, events: b.doc.timeline.length, snapshot: r.snapshot ?? null, ms: b.ms, fetched: b.fetched, warn: b.warn };
 }
 
 // ---- CLI -----------------------------------------------------------------------------------------------------------
