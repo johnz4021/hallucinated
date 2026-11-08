@@ -3,12 +3,12 @@ import assert from "node:assert/strict";
 import { naiveReply, naiveSession, ACT_TYPE } from "./naive_browser.mjs";
 
 const POST = "my AI agent deployed to prod on a friday and now it's the CTO";
-function fake({ status = { status: "active", timeout_at: new Date(Date.now() + 3600_000).toISOString(), id: "brw_1" }, layers = "", account = "Hallucinated Goods @hallucinateddpt", page = POST, statusThrows = false, mangle = false, actPosts = false, reopen = true } = {}) {
+function fake({ status = { status: "active", timeout_at: new Date(Date.now() + 3600_000).toISOString(), id: "brw_1" }, layers = "", account = "Hallucinated Goods @hallucinateddpt", page = POST, statusThrows = false, mangle = false, actPosts = false, reopen = true, homeAccount = null, homeUrl = null, homeThrows = 0 } = {}) {
   const calls = []; let box = "", url = "about:blank", dialog = false, toast = "";
   const b = {
     status: async () => { if (statusThrows) throw new Error("404 not_found: no browser is open on cmp_1"); return status; },
     close: async () => { calls.push(["close"]); statusThrows = true; return { status: "closed" }; },
-    goto: async (u) => { calls.push(["goto", u]); if (statusThrows && reopen) { statusThrows = false; status = { status: "active", timeout_at: new Date(Date.now() + 3600_000).toISOString(), id: "brw_new" }; } url = u; box = ""; dialog = false; return { url }; },
+    goto: async (u) => { calls.push(["goto", u]); if (/x\.com\/home/.test(u) && homeThrows-- > 0) throw new Error("the service is at capacity"); if (/x\.com\/home/.test(u) && homeAccount !== null) account = homeAccount; if (/x\.com\/home/.test(u) && homeUrl) { url = homeUrl; return { url }; } if (statusThrows && reopen) { statusThrows = false; status = { status: "active", timeout_at: new Date(Date.now() + 3600_000).toISOString(), id: "brw_new" }; } url = u; box = ""; dialog = false; return { url }; },
     click: async (s) => { calls.push(["click", s]); if (/"reply"\]$/.test(s)) dialog = true; if (/tweetButton/.test(s)) { dialog = false; toast = "Your post was sent. View"; } return {}; },
     type: async (s) => { calls.push(["type", s]); return {}; },   // X ignores it (as on the real site)
     act: async (instr, vars) => { calls.push(["act", instr, vars]); if (actPosts) { dialog = false; toast = "Your post was sent."; return {}; } box = mangle ? vars.reply.slice(1) : vars.reply; return {}; },
@@ -41,9 +41,26 @@ await ok("dry: types, verifies, never clicks post, discards the draft, ends home
   assert.match(tail[0], /app-bar-close/); assert.match(tail[1], /confirmationSheetCancel/); assert.equal(tail[2], "https://x.com/home");
   assert.match(f.calls.find(([k]) => k === "click")[1], /tabindex="-1"\] \[data-testid="reply"\]/);
 });
-await ok("logged out -> logged_out (pause + flag, never log in), even though the page shows a login wall", async () => {
-  const r = await naiveReply({ ...base, v: fake({ account: "Sign in", layers: "Don't miss what's happening. Log in" }).v, dry: true });
-  assert.equal(r.logged_out, true); assert.equal(r.blocked, undefined); assert.match(r.reason, /not logged in/);
+const noWait = async () => {};
+await ok("logged out on the post page AND home (login redirect) -> logged_out (pause + flag, never log in)", async () => {
+  const r = await naiveReply({ ...base, v: fake({ account: "Sign in", layers: "Don't miss what's happening. Log in", homeUrl: "https://x.com/i/flow/login" }).v, dry: true, wait: noWait });
+  assert.equal(r.logged_out, true); assert.equal(r.blocked, undefined); assert.match(r.reason, /both logged out/);
+});
+await ok("post page didn't load but home is logged in -> transient skip, no pause", async () => {
+  const f = fake({ account: "", homeAccount: "Hallucinated Goods @hallucinateddpt" });
+  const r = await naiveReply({ ...base, v: f.v, dry: true, wait: noWait });
+  assert.equal(r.logged_out, undefined); assert.equal(r.transient, true); assert.match(r.reason, /didn't load/);
+  assert.ok(f.calls.some(([k, u]) => k === "goto" && /x\.com\/home/.test(u)));
+});
+await ok("Naïve at capacity on the home re-check: retried, then transient skip (no pause)", async () => {
+  const r = await naiveReply({ ...base, v: fake({ account: "", homeThrows: 5 }).v, dry: true, wait: noWait });
+  assert.equal(r.logged_out, undefined); assert.equal(r.transient, true); assert.match(r.reason, /didn't answer/);
+  const r2 = await naiveReply({ ...base, v: fake({ account: "", homeThrows: 1, homeAccount: "@hallucinateddpt" }).v, dry: true, wait: noWait });
+  assert.equal(r2.transient, true); assert.match(r2.reason, /didn't load/);   // one 429, then home shows the account
+});
+await ok("home loads but still no account and no login wall -> unknown -> transient (no pause)", async () => {
+  const r = await naiveReply({ ...base, v: fake({ account: "" }).v, dry: true, wait: noWait });
+  assert.equal(r.transient, true); assert.equal(r.logged_out, undefined);
 });
 await ok("X challenge in #layers -> blocked", async () => {
   const r = await naiveReply({ ...base, v: fake({ layers: "We noticed unusual activity. Verify you are human" }).v, dry: true });

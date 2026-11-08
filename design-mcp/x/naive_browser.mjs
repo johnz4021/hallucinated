@@ -59,15 +59,40 @@ export async function discard(b) {
   return (await ex(b, "#layers")) === "";
 }
 
-// -> { ok, dry?, url?, blocked?, expired?, reason?, unconfirmed? }  Budget ~75 s.
-export async function naiveReply({ v, computerId, postUrl, postText, text, dry = false, verify, log = () => {} }) {
+// A failed logged-in check on a POST page isn't proof of a logout (Sat 22:24: Naïve "at capacity", the page hadn't
+// loaded, and replies paused although the session was fine). Re-check on x.com/home, retrying Naïve 429 / capacity:
+//   -> "in"      logged in after all (the post page just didn't load: skip this reply, don't pause)
+//   -> "out"     home ALSO shows logged out: X's login wall / redirect to login, and no account button
+//   -> "unknown" home didn't answer either (Naïve trouble): skip this reply, don't pause
+const isCapacity = (e) => /429|capacity|rate.?limit|did not answer/i.test(String(e?.message || e));
+export async function confirmLoggedOut(b, { tries = 3, wait = (ms) => sleep(ms) } = {}) {
+  for (let i = 0; i < tries; i++) {
+    let g;
+    try { g = await b.goto("https://x.com/home"); }
+    catch (e) { if (isCapacity(e) && i < tries - 1) { await wait(4000 * (i + 1)); continue; } return "unknown"; }
+    if (await loggedInAs(b)) return "in";
+    const url = String(g?.url || "");
+    const wall = detectBlock({ url, text: await ex(b, "body") });
+    if (/\/(login|i\/flow\/login)/.test(url) || /login wall/.test(wall || "") || /x\.com\/?$/.test(url.replace(/\?.*$/, ""))) return "out";
+    if (i < tries - 1) await wait(3000 * (i + 1));   // home loaded without the account button yet: give it another moment
+  }
+  return "unknown";
+}
+
+// -> { ok, dry?, url?, blocked?, expired?, logged_out?, transient?, reason?, unconfirmed? }  Budget ~75 s.
+export async function naiveReply({ v, computerId, postUrl, postText, text, dry = false, verify, log = () => {}, wait }) {
   const t0 = Date.now(), left = () => 75_000 - (Date.now() - t0);
   const s = await naiveSession(v, computerId, { log });
   if (!s.ok) return s;
   const b = s.b;
   const g = await b.goto(postUrl);
   // logged in first (a logged-out page also shows a login wall, which is a re-login, not an X block)
-  if (!(await loggedInAs(b))) return { ok: false, logged_out: true, reason: `the browser is not logged in to X as @${HANDLE}${s.renewed ? " after reopening it" : ""} (${g.url})` };
+  if (!(await loggedInAs(b))) {
+    const home = await confirmLoggedOut(b, wait ? { wait } : {});
+    if (home === "out") return { ok: false, logged_out: true, reason: `the browser is not logged in to X as @${HANDLE}${s.renewed ? " after reopening it" : ""} (post page and x.com/home both logged out)` };
+    log(`[x_browser_reply naive] post page showed no account (${g.url}); x.com/home says ${home}: skipping this reply, not pausing`);
+    return { ok: false, transient: true, reason: home === "in" ? "the post page didn't load in time (X or Naïve slow); skipped this reply, try next run" : "the X browser didn't answer in time (Naïve busy); skipped this reply, try next run" };
+  }
   let block = await blockCheck(b, g.url);
   if (block) return { ok: false, blocked: block };
   // the right post? its text must match what the API says (first 40 characters, links stripped)
