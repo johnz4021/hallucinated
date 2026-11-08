@@ -211,7 +211,7 @@ function flagUnmakeable(rootDir, log, needsJohn) {
   writeJson(f, led);
 }
 
-export async function salesStatus(sc, rootDir, { since, drop = "drop-1", minQty = Number(process.env.SALES_MIN_QTY || 3), maxWaitH = Number(process.env.SALES_MAX_WAIT_H || 24), log, flag = true } = {}) {
+export async function salesStatus(sc, rootDir, { since, drop = "drop-1", minQty = Number(process.env.SALES_MIN_QTY || 1), maxWaitH = Number(process.env.SALES_MAX_WAIT_H || 24), log, flag = true } = {}) {
   const orders = await fetchOrders(sc, rootDir, { since, drop, unbatchedOnly: true });
   const plan = planBatches(orders, makeableList(rootDir, sc.mode));
   if (flag) flagUnmakeable(rootDir, log, plan.needs_john);

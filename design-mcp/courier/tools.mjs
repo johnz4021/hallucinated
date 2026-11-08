@@ -3,6 +3,8 @@
 //   courier_quote  -> dry run to Uber's final screen, books nothing (allow)
 //   courier_book   -> actually requests the courier, only if the price is under max_price_usd (Naïve "ask": John approves)
 //   courier_status -> waits up to 60 s, returns the phone task's state and result
+// pickup_time "HH:MM" (SF, today) on quote/book uses Uber's own scheduling ("Schedule"/"Later"): the booking is made now
+// for a courier that comes at that time. Quote with the same pickup_time first so the schedule screen is proven.
 // Needs MOBILERUN_API_KEY in .env (optional MOBILERUN_DEVICE_ID; default: the first ready iPhone).
 import fs from "node:fs";
 import path from "node:path";
@@ -18,19 +20,23 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const OUTPUT = { type: "object", properties: {
   reached_final_screen: { type: "boolean" }, booked: { type: "boolean" }, service_name: { type: "string" },
-  pickup_resolved: { type: "string" }, dropoff_resolved: { type: "string" }, price: { type: "string" }, eta: { type: "string" },
+  pickup_resolved: { type: "string" }, scheduled_for: { type: "string" }, dropoff_resolved: { type: "string" }, price: { type: "string" }, eta: { type: "string" },
   courier_or_trip_status: { type: "string" }, blockers: { type: "string" } }, required: ["reached_final_screen", "booked"] };
 
-function brief({ order_number, dropoff, book, max_price_usd }) {
+const ampm = (t) => { const [h, m] = t.split(":").map(Number); return `${((h + 11) % 12) + 1}:${String(m).padStart(2, "0")} ${h < 12 ? "AM" : "PM"}`; };
+function brief({ order_number, dropoff, book, max_price_usd, pickup_time }) {
+  const when = pickup_time ? `
+- SCHEDULE it, don't send it now: use Uber's scheduling option for this delivery (a "Schedule", "Later", "Reserve" or clock/calendar control, usually next to "Now" or on the final screen). Pick TODAY and the pickup time ${ampm(pickup_time)} (if Uber offers windows, the window that starts at ${ampm(pickup_time)}, else the closest one starting between 15 minutes before and ${ampm(pickup_time)}). Confirm the screen shows today and that time before going on, and report it as scheduled_for.
+- If Uber offers no scheduling for this delivery, or not today at that time, STOP: request nothing and report it in blockers.` : "";
   const setup = `In the Uber app, set up a package delivery (Uber's "Courier", "Package" or "Send" option, not a ride):
 - Pickup (sender's location): ${PICKUP}. Sender: John Zhang.
 - Dropoff (recipient's location): ${dropoff || DROPOFF}. Recipient: John Zhang.
 - Item: clothing / t-shirts, small. Pickup notes: "Customania order ${order_number || ""} for John Zhang, custom t-shirts, ask at the counter".
-Check the pickup really is Customania on 20th Ave and the dropoff is the address above before continuing.
+Check the pickup really is Customania on 20th Ave and the dropoff is the address above before continuing.${when}
 Never change payment methods, tips or account settings. Never open any other app.`;
   return book
     ? `${setup}
-Go to the final screen with the price. If the standard price is at most $${max_price_usd}, tap the button that requests the courier ONCE, then wait until Uber shows the courier is being matched or assigned, and report it. If the price is higher, do NOT request: go back and report the price.`
+Go to the final screen with the price. If the standard price is at most $${max_price_usd}, tap the button that requests${pickup_time ? " (schedules)" : ""} the courier ONCE, then wait until Uber shows it ${pickup_time ? "is scheduled (an upcoming/reserved delivery for that time)" : "is matching or assigning a courier"}, and report it. If the price is higher, do NOT request: go back and report the price.`
     : `DRY RUN. Do NOT book, request, confirm, send or pay for anything. Never tap a final button such as "Request", "Confirm", "Book" or "Send package".
 ${setup}
 Go as far as the final screen that shows the price and the request button, STOP without tapping it, then go back one screen so nothing is pending. Report what you saw.`;
@@ -65,13 +71,13 @@ export function registerCourierTools(server, ctx) {
   server.registerTool("courier_quote", {
     title: "Get an Uber Courier quote (books nothing)",
     description: "Uses John's phone to set up an Uber Courier delivery from Customania (pickup) to the YC office (or `dropoff`) and stops at Uber's final screen: returns price and ETA via courier_status. Books nothing. Takes ~3-5 min.",
-    inputSchema: { order_number: z.string().optional(), dropoff: z.string().optional() },
+    inputSchema: { order_number: z.string().optional(), dropoff: z.string().optional(), pickup_time: z.string().regex(/^([01]?\d|2[0-3]):[0-5]\d$/).optional().describe("HH:MM, 24 h, San Francisco time today: schedule the courier in Uber for this pickup time instead of sending one now") },
   }, async (a) => { try { return await start(a, false); } catch (e) { return err(`courier_quote failed: ${e.message}`); } });
 
   server.registerTool("courier_book", {
     title: "Book the Uber Courier (spends money, needs human OK)",
     description: "Uses John's phone to request an Uber Courier from Customania to the YC office (or `dropoff`), only if the price is at most max_price_usd. Real charge on John's card, so it is always held for his approval. Get a quote first and pass max_price_usd a little above it. Follow with courier_status.",
-    inputSchema: { order_number: z.string(), max_price_usd: z.number().min(1).max(60), dropoff: z.string().optional() },
+    inputSchema: { order_number: z.string(), max_price_usd: z.number().min(1).max(60), dropoff: z.string().optional(), pickup_time: z.string().regex(/^([01]?\d|2[0-3]):[0-5]\d$/).optional().describe("HH:MM, 24 h, San Francisco time today: schedule the courier in Uber for this pickup time instead of sending one now") },
   }, async (a) => { try { return await start(a, true); } catch (e) { return err(`courier_book failed: ${e.message}`); } });
 
   server.registerTool("courier_status", {

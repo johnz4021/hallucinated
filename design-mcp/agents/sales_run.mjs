@@ -4,7 +4,7 @@ process.on("unhandledRejection", (e) => { console.error(e); });
 //   node agents/sales_run.mjs --dry          # Ops builds and verifies the cart, then STOPS before the handoff and closes it
 //                                            # (no batch lock, nothing marked, nothing paid)
 //   node agents/sales_run.mjs --human-pay    # full: batch lock -> cart -> handoff (you approve in Studio and pay) -> mark batched
-//   --min <n>    minimum shirts to proceed (default 1 here; the hourly deployment waits for SALES_MIN_QTY, default 3)
+//   --min <n>    minimum shirts to proceed (default 1 here; the daily 9:00 deployment uses SALES_MIN_QTY, default 1)
 //   --drop <id>  only sales of this metadata.drop (default all)
 // Uses serve.command's tools if it's up (recommended), else starts its own server + tunnel.
 // Env read by the tool process: HANDOFF_TIMEOUT_MIN (default 15).
