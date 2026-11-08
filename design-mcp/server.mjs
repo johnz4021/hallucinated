@@ -12,6 +12,7 @@ import { registerAgentMailTools } from "./agentmail/tools.mjs";
 import { registerStripeTools } from "./stripe/tools.mjs";
 import { registerTrendsTools } from "./trends/tools.mjs";
 import { registerPreorderTools } from "./stripe/preorders.mjs";
+import { registerSupportTools } from "./stripe/support.mjs";
 import { registerDesignTools } from "./designs/tools.mjs";
 import { registerCreativeTools } from "./creative/tools.mjs";
 
@@ -59,6 +60,7 @@ export function buildMcp(ctx) {
   if (ctx.rootDir) registerStripeTools(server, ctx);
   if (ctx.rootDir) registerTrendsTools(server, ctx);
   if (ctx.rootDir) registerPreorderTools(server, ctx);
+  if (ctx.rootDir) registerSupportTools(server, ctx);
   if (ctx.rootDir) registerDesignTools(server, ctx);
   if (ctx.rootDir) registerCreativeTools(server, ctx);
   return server;

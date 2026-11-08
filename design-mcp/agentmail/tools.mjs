@@ -124,7 +124,8 @@ export function registerAgentMailTools(server, ctx) {
         mark(message_id, { kind, from: addr(m.from), replied_at: new Date().toISOString(), handled_at: new Date().toISOString(), reply_message_id: r.message_id });
         await label(message_id, ["replied", "handled"], ["unread"]);
         ctx.log?.(`[inbox_reply] to ${addr(m.from)} re "${m.subject}" (${r.message_id})`);
-        return txt({ sent: true, to: addr(m.from), reply_message_id: r.message_id, thread_id: r.thread_id });
+        // threading: AgentMail's /reply sets In-Reply-To/References, so the reply lands in the customer's thread
+        return txt({ sent: true, to: addr(m.from), reply_message_id: r.message_id, thread_id: r.thread_id, threaded: !!r.thread_id && r.thread_id === m.thread_id });
       } catch (e) { return err("inbox_reply failed: " + e.message); }
     });
 

@@ -34,13 +34,14 @@ const SEED_IDS = [...Object.values(DROP1.sessions), DROP1.pickup_session];
 const SEED_ROLE = Object.fromEntries(Object.entries(DROP1.sessions).map(([r, id]) => [id, r]));
 
 const ROLE = { product: "product", ceo: "ceo", ops: "ops", growth: "growth", support: "support", creative: "growth", reviewer: "growth" };
-const ASK = new Set(["customania_handoff_payment", "courier_book", "charge_preorders", "x_ads_activate", "issue_card"]);
+const ASK = new Set(["customania_handoff_payment", "courier_book", "charge_preorders", "x_ads_activate", "issue_card", "refund_request"]);
 // tools whose outputs we keep in the cache (things that changed something outside, plus what explains them)
 const KEEP = new Set(["generate_design", "propose_design", "ceo_decide", "x_post", "x_reply", "customania_checkout", "customania_handoff_payment",
   "customania_payment_status", "courier_quote", "courier_status", "courier_book", "inbox_reply", "sales_batch_start", "sales_batch_abort",
-  "set_plan", "ops_courier_request", "charge_preorders", "ad_submit", "x_browser_reply", "ad_image_generate", "ad_video_compose", "ad_review_status"]);
+  "set_plan", "ops_courier_request", "charge_preorders", "ad_submit", "x_browser_reply", "ad_image_generate", "ad_video_compose", "ad_review_status",
+  "order_lookup", "order_status", "refund_request"]);   // support: only counts/amounts/status are read from these outputs, never emails
 // args kept per tool (whitelist: checkout args carry the founder's name and the inbox address, so only sizes survive)
-const ARGS = { generate_design: ["text", "placement"], propose_design: ["design_id", "title", "slug"], ceo_decide: ["proposal_id", "decision", "reason"],
+const ARGS = { flag_john: ["reason"], refund_request: ["amount_usd"], generate_design: ["text", "placement"], propose_design: ["design_id", "title", "slug"], ceo_decide: ["proposal_id", "decision", "reason"],
   customania_checkout: ["sizes"], customania_handoff_payment: ["amount_due"], courier_book: ["order_number", "max_price_usd", "pickup_time"],
   courier_quote: ["order_number", "pickup_time"], ad_video_start: ["model"], ad_submit: ["review_id", "kind"], ad_review: ["kind"], x_browser_reply: ["target_url"], generate_image: ["model"], sales_batch_abort: ["reason"], ops_courier_request: ["order_number"] };
 
@@ -121,7 +122,7 @@ function stripeCall(key) {
 }
 
 // ---- Naïve sessions + events (cached) ------------------------------------------------------------------------------
-function compact(e) {
+export function compact(e) {
   const d = e.data || {}, at = e.created_at;
   if (e.type === "tool.started" || e.type === "tool.confirm") {
     const n = stripPrefix(d.name), keep = ARGS[n] || [], a = {};
@@ -232,7 +233,7 @@ function resultText(r, role) {
   return parts.length ? clip(parts.join("; "), 300) : null;
 }
 
-function deriveSession(c, dry) {
+export function deriveSession(c, dry) {
   const ev = [...c.events].sort((a, b) => a.seq - b.seq);
   // dry runs: listed in an order-runs record, or the session says so itself (fake post ids, RESULT dry:true)
   const res0 = resultOf(c)?.json;
@@ -243,8 +244,21 @@ function deriveSession(c, dry) {
   const started = new Map(ev.filter((e) => e.t === "ts").map((e) => [e.id, e]));
   const ok = ev.filter((e) => e.t === "tc" && !e.err && !/waiting for approval/.test(e.o)).map((e) => ({ ...e, a: started.get(e.id)?.a || {}, startedAt: started.get(e.id)?.at || e.at }));
   const add = (agent, kind, text, at, url) => items.push({ at, agent, kind, text: clip(text, 400), ...(url ? { url } : {}), session: c.id });
+  // Support: what it did for one email, with tool names (no emails, names or bodies)
+  let steps = [], stepsAt = null;
+  const step = (txt, at) => { steps.push(txt); stepsAt ||= at; };
+  const flushSteps = () => { if (steps.length) { const t = steps.join(", "); add("support", "email", t[0].toUpperCase() + t.slice(1) + tag, stepsAt); } steps = []; stepsAt = null; };
   for (const e of ok) {
     const o = parseJ(e.o) || {};
+    if (c.role === "support") switch (e.n) {
+      case "inbox_read": flushSteps(); step("Read a customer email (inbox_read)", e.at); continue;
+      case "order_lookup": step(`looked up their order in Stripe (order_lookup${o.count != null ? `: ${o.count} found` : ""})`, e.at); continue;
+      case "order_status": step(`checked the order status (order_status${o.order?.status ? `: ${o.order.status}` : ""})`, e.at); continue;
+      case "preorder_cancel": step("cancelled their pre-order (preorder_cancel)", e.at); continue;
+      case "refund_request": step(`refunded ${o.amount_usd != null ? `$${Number(o.amount_usd).toFixed(2)}` : "the order"} after the founder approved (refund_request)`, e.at); continue;
+      case "flag_john": step(`flagged the founder (flag_john${e.a.reason ? `: ${e.a.reason}` : ""})`, e.at); continue;
+      case "inbox_reply": step("replied (inbox_reply)", e.at); flushSteps(); continue;
+    }
     switch (e.n) {
       case "generate_design":
         if (o.id) { facts.designs.push({ id: o.id, at: e.at, session: c.id, pass: !!o.pass });
@@ -275,7 +289,7 @@ function deriveSession(c, dry) {
           : `Got an Uber Courier quote, Customania (SF) → YC${price ? `: $${price.toFixed(2)}` : ""}${when ? ` for ${when}` : ""}${tag}`, e.at);
         break;
       }
-      case "inbox_reply": add(c.role, "email", `Answered a customer email${tag}`, e.at); break;
+      case "inbox_reply": add(c.role, "email", `Answered a customer email (inbox_reply)${tag}`, e.at); break;
       case "sales_batch_start": add("ops", "batch", `Batched paid store orders into one Customania order${tag}`, e.at); break;
       case "sales_batch_abort": add("ops", "batch", `Stopped the store-order batch${e.a.reason ? `: ${clip(plain(e.a.reason), 160)}` : ""}${tag}`, e.at); break;
       case "set_plan": add(c.role, "plan", `Set the plan for the other agents${e.a.themes_n ? ` (${e.a.themes_n} themes)` : ""}${tag}`, e.at); break;
@@ -285,6 +299,7 @@ function deriveSession(c, dry) {
       case "x_post": case "x_reply": if (o.id) facts.posts.push({ id: String(o.id), role: c.role }); break;
     }
   }
+  flushSteps();
   // the founder's calls on ask-tools: approved if the same tool later succeeded, declined if the session moved on without it
   const seen = new Set();
   for (const cf of ev.filter((e) => e.t === "cf" && ASK.has(e.n))) {
@@ -303,6 +318,9 @@ function deriveSession(c, dry) {
       const booked = facts.courier.find((x) => x.booked && x.at >= cf.at);
       const amount = booked?.price ?? (cf.a.max_price_usd != null ? Number(cf.a.max_price_usd) : null);
       human.push({ at, kind: "courier_approval", text: okAfter ? `Founder approved the Uber Courier booking${cf.a.order_number ? ` for ${cf.a.order_number}` : ""}${cf.a.max_price_usd ? ` (cap $${cf.a.max_price_usd})` : ""}${tag}` : `Founder declined the courier booking${tag}`, ...(amount != null ? { amount_usd: amount } : {}) });
+    } else if (cf.n === "refund_request") {
+      const amt = cf.a.amount_usd != null ? Number(cf.a.amount_usd) : money(parseJ(okAfter?.o)?.amount_usd);
+      human.push({ at, kind: "refund_approval", text: okAfter ? `Refund approved by founder${amt != null ? ` ($${amt.toFixed(2)})` : ""}${tag}` : `Founder declined a refund${tag}` });
     } else {
       human.push({ at, kind: "approval", text: `Founder ${okAfter ? "approved" : "declined"} ${cf.n.replace(/_/g, " ")}${tag}` });
     }
@@ -333,7 +351,8 @@ const NOW_LABEL = {
   customania_checkout: "checking out at Customania", customania_handoff_payment: "handing payment to the founder", customania_payment_status: "waiting for payment",
   courier_quote: "getting a courier quote", courier_book: "booking a courier", courier_status: "checking the courier", inbox_list: "reading the inbox",
   inbox_read: "reading an email", inbox_reply: "answering an email", stripe_orders: "reading store orders", sales_batch_start: "batching store orders",
-  flag_john: "flagging the founder", charge_preorders: "charging pre-orders",
+  flag_john: "flagging the founder", charge_preorders: "charging pre-orders", order_lookup: "looking up an order", order_status: "checking an order",
+  refund_request: "waiting for a refund approval", preorder_cancel: "cancelling a pre-order",
 };
 const nowLabel = (n, a = {}) => n === "ad_video_start" ? `generating video${a.model ? ` (${String(a.model).split("/").pop().split("-")[0]})` : ""}` : NOW_LABEL[n] || String(n || "working").replace(/^.*\./, "").replace(/_/g, " ");
 
@@ -510,7 +529,7 @@ const TOOL_META = {
   preorders_list: ["Pre-orders", "money"], charge_preorders: ["Charge pre-orders", "money"], charge_preorders_status: ["Charge status", "money"],
   inbox_list: ["Inbox", "inbox"], inbox_read: ["Read email", "inbox"], inbox_reply: ["Reply email", "mail"], inbox_mark_handled: ["Mark handled", "inbox"],
   ops_courier_request: ["Courier request", "courier"], preorder_cancel: ["Cancel pre-order", "money"], preorder_send_payment_link: ["Payment link", "mail"],
-  flag_john: ["Flag founder", "flag"],
+  flag_john: ["Flag founder", "flag"], order_lookup: ["Order lookup", "money"], order_status: ["Order status", "money"], refund_request: ["Refund", "money"],
 };
 // the storefront's icon set, exactly; anything else renders as "other"
 const ICONS = new Set(["search", "trends", "design", "image", "video", "review", "check", "post", "reply", "browser", "store", "money", "courier", "inbox", "plan", "flag", "catalog", "mail", "other"]);

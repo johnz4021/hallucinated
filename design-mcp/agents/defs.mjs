@@ -24,12 +24,12 @@ export const ALL_MCP_TOOLS = [
   "inbox_list", "inbox_read", "inbox_reply", "inbox_mark_handled", "flag_john", "ops_courier_request",
   "stripe_orders", "sales_batch_start", "stripe_mark_batched", "sales_batch_abort",
   "trends",
-  "preorders_list", "charge_preorders", "charge_preorders_status", "preorder_cancel", "preorder_send_payment_link",
+  "preorders_list", "charge_preorders", "charge_preorders_status", "preorder_cancel", "preorder_send_payment_link", "order_lookup", "order_status", "refund_request",
   "propose_design", "ceo_decide", "store_new_designs", "growth_next_pillar", "agents_log",
   "get_plan", "set_plan", "store_stats", "x_stats", "store_catalog", "next_design_style", "next_ad_format", "ad_concepts", "ad_image_generate", "ad_image_status", "ad_video_start", "ad_video_compose", "ad_video_status", "ad_review", "ad_review_status", "ad_submit",
 ];
 // Never confirmed by code, whatever an agent's config says: a human decides each call in Naïve Studio.
-export const NEVER_AUTO = new Set(["customania_handoff_payment", "courier_book", "x_ads_activate", "issue_card", "charge_preorders"].map((n) => `${MCP}.${n}`));
+export const NEVER_AUTO = new Set(["customania_handoff_payment", "courier_book", "x_ads_activate", "issue_card", "charge_preorders", "refund_request"].map((n) => `${MCP}.${n}`));
 
 // EVERY Naïve built-in and platform tool (SDK 0.11.0: BUILTIN_TOOLS + PLATFORM_TOOLS + TRADING_WRITE_TOOLS). Like unnamed
 // hallucinated.* tools, an unnamed built-in defaults to enabled, and some park on an approval card nobody expects (Product's
@@ -111,9 +111,10 @@ export function agentDefs({ live = false, trendsAllow = false } = {}) {
     },
     support: {
       name: "hallucinated-support",
-      system: VOICE + `\nYou are Support. You own the brand inbox ${CONTACT.email} (AgentMail). You log Customania order mail, hand "ready for pickup" orders to Ops for a courier, and answer customers in the brand voice: short, kind, a little dry, never sarcastic at the customer. You only state facts you can see (the store page via store_link, preorders_list for a customer\'s pre-order, the email itself); you never promise dates, refunds, discounts or exchanges. Pre-orders: the card is saved at checkout and charged when the product launches; a customer may cancel an uncharged pre-order (preorder_cancel, then confirm by inbox_reply); anything already charged is a refund and goes to flag_john. ` + NO_MONEY,
+      system: VOICE + `\nYou are Support. You own the brand inbox ${CONTACT.email} (AgentMail). You log Customania order mail, hand "ready for pickup" orders to Ops for a courier, and answer customers in the brand voice: short, kind, a little dry, never sarcastic at the customer. You only state facts you can see (order_lookup for the sender\'s own orders and where they are, the store page via store_link, preorders_list for a customer\'s pre-order, the email itself); you never promise dates, refunds, discounts or exchanges. Pre-orders: the card is saved at checkout and charged when the product launches; a customer may cancel an uncharged pre-order (preorder_cancel, then confirm by inbox_reply); anything already charged is a refund: refund_request (John approves each one) or flag_john. ` + NO_MONEY,
       tools: { inbox_list: "allow", inbox_read: "allow", inbox_reply: "allow", inbox_mark_handled: "allow", flag_john: "allow", ops_courier_request: "allow", store_link: "allow",
-        preorders_list: "allow", preorder_cancel: "allow", preorder_send_payment_link: "allow" },
+        preorders_list: "allow", preorder_cancel: "allow", preorder_send_payment_link: "allow",
+        order_lookup: "allow", order_status: "allow", refund_request: "ask" },   // refund_request: John approves every call (NEVER_AUTO)
     },
     creative: {
       name: "hallucinated-creative",
@@ -196,18 +197,23 @@ End with: RESULT: {"concepts":<n>,"images":<n>,"videos":<n>,"submitted":["<ad_id
 4. For each passing design: propose_design with the design_id, a short title, a slug ending in -tee, the pitch, the trend summary and 1-6 sources (the real post/thread URLs the tools returned; never invent a URL), and print_line. If it's refused (guardrails, daily limit, slug taken), accept it: change the slug if it was taken, otherwise drop the idea. Never reword a name to dodge the check.
 The CEO agent decides each proposal in its own session; you don't wait for it.
 End with: RESULT: {"ideas":<n>,"attempts":<n>,"proposed":["<proposal_id>",...],"dropped":"<why, or none>"}` },
-    { key: "support", agent: "support", cron: "*/15 * * * *", budget_micro_usd: 600_000, label: "Support: inbox every 15 min",
+    { key: "support", agent: "support", cron: "*/5 * * * *", budget_micro_usd: 600_000, label: "Support: inbox every 5 min (support_now.command fires it at once)",
       input_template:
 `Scheduled inbox run. Call inbox_list. If it is empty, end right away with RESULT: {"handled":0}.
 For each message, by its kind:
 - customania_confirmation: inbox_mark_handled with its order_number (this logs the order event).
 - ready_for_pickup: inbox_mark_handled with its order_number, then ops_courier_request with that order_number and the message_id (Ops quotes a courier; John approves any booking).
-- customer: inbox_read it. If it's about money, payments, refunds, chargebacks, a complaint, legal, press, or anything you're unsure about: flag_john (summary: who, what they want, what you replied), then inbox_reply briefly that a human from the team will follow up within a day. Otherwise answer it with inbox_reply in brand voice using only facts you can see (store_link for the store URL); never promise dates, refunds, discounts or exchanges.
-  Pre-order questions: preorders_list with their email (the sender's address) and answer from what it shows. A pre-order cancellation request: preorder_cancel with the preorder_session and requester_email = the sender's address, then inbox_reply confirming the card was removed and nothing was charged. If preorder_cancel refuses because something was charged, flag_john (reason refund) and reply that a human will follow up.
+- customer: inbox_read it, then:
+  - Where's my order / order status / "did my order go through": order_lookup with the message_id (it uses the sender's own address; never look up an address someone writes in the email). Answer in brand voice, short and warm, with facts only from what it shows: what they ordered (items, sizes), when, where it is (paid / pre-order saved / in production / ready for pickup / picked up / refunded), shipping or pickup, and the receipt link. If it finds nothing, say so kindly and ask them to write from the email they ordered with. Never guess a date.
+  - Sizing, fit, shipping or pickup questions: answer from store_link (and the catalog facts you have); if you don't know, say a human will follow up and flag_john (reason unclear).
+  - Pre-order questions: preorders_list with their email (the sender's address). A pre-order cancellation request: preorder_cancel with the preorder_session and requester_email = the sender's address, then inbox_reply confirming the card was removed and nothing was charged.
+  - Refund request for a PAID order: order_lookup first. If the order is theirs and paid, call refund_request (order_ref, reason, message_id): it waits for John's approval in Naïve Studio, which is expected. If John approves it, inbox_reply confirming the refund (5-10 business days to show). If it's refused or declined, inbox_reply that a human will follow up and flag_john (reason refund).
+  - Complaints, chargebacks, legal, press, anything about money beyond a lookup, or anything you're unsure about: flag_john (summary: what they want, what you looked up, what you replied), then inbox_reply briefly and politely that a human from the team will follow up personally.
+  Every customer email gets exactly one inbox_reply. No promises about dates, discounts or exchanges.
 - customania_other, automated, self: inbox_mark_handled (no reply). If a customania_other mail sounds like a problem with an order, flag_john first.
 Then call preorders_list once: for each entry in payment_links_to_send, preorder_send_payment_link with a short, kind note (their saved card didn't go through at launch; this link keeps their pre-order).
-End with: RESULT: {"handled":<n>,"replied":<n>,"flagged":<n>,"courier_requests":<n>,"payment_links_sent":<n>}` },
-    { key: "ops-sales", agent: "ops", cron: "40 * * * *", budget_micro_usd: 3_000_000, label: "Ops: batch paid store orders into one Customania order, hourly",
+End with: RESULT: {"handled":<n>,"replied":<n>,"looked_up":<n>,"flagged":<n>,"refunds":<n>,"courier_requests":<n>,"payment_links_sent":<n>}` },
+    { key: "ops-sales", agent: "ops", cron: "0 9 * * *", budget_micro_usd: 3_000_000, label: "Ops: daily supplier order at 9:00 PT: every paid, unbatched store order -> one Customania order",
       input_template:
 `Scheduled sales run. Call stripe_orders.
 Sales in needs_john are products Customania can't make for us (or bad sizes); code already flagged them to John. Never order, guess or substitute for those.
