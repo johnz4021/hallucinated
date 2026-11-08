@@ -58,20 +58,20 @@ export function recordStyle(rootDir, style, design_id, override_reason) {
 // PHOTOREALISTIC photo of a (fictional) person WEARING our clothes, the garment the clear centre of the frame. The joke is
 // the situation + the X caption. Rotated like the design styles (in ads.json), each paired with a photo style.
 export const AD_FORMATS = {
-  beanbag_3am: "a founder asleep on an office beanbag at 3am, laptop still open, cold pizza, monitor glow",
-  whiteboard_boxes: "two engineers at a whiteboard covered in boxes and arrows, one pointing with total confidence",
-  caltrain_fog: "someone waiting on a foggy Caltrain platform at dawn, hands in pockets, train lights in the mist",
-  demo_day_stage: "a demo-day stage photo: a nervous founder mid-pitch under hard stage lights, audience silhouettes",
-  waymo_selfie: "a back-seat selfie in a driverless robotaxi (unbranded), empty driver's seat in frame",
-  coffee_shop_laptop: "a coffee-shop laptop shot: a founder hunched over a laptop, oat-milk latte, three chargers",
-  rto_badge_line: "an office return-to-office badge line, a queue of tired engineers at the turnstiles at 9am",
-  dolores_park: "Dolores Park on a sunny afternoon, someone 'working' on a laptop on the grass, city skyline behind",
-  server_room: "a server room: someone in the aisle between blinking racks, holding a single sad cable",
-  standup_meeting: "a daily standup in a glass meeting room, everyone standing, one person very much not listening",
-  rooftop_party: "a startup rooftop party at golden hour, someone explaining their pivot to a polite stranger",
-  scooter_commute: "someone on an electric scooter in the Mission at rush hour, laptop bag, determined face",
-  vc_coffee: "a pitch over coffee at a Sand Hill Road cafe, the founder leaning in, the investor checking their phone",
-  hackathon_floor: "a hackathon floor at 4am: energy drinks, sleeping bags, one person still coding",
+  beanbag_3am: "a founder asleep on an office beanbag at 3am, laptop lid half closed, cold pizza, warm lamp glow, blank wall behind",
+  caltrain_fog: "someone waiting on a foggy train platform at dawn, hands in pockets, soft headlights in the mist (no signs in frame)",
+  demo_day_stage: "a demo-day stage photo: a nervous founder mid-pitch under hard stage lights against a plain dark backdrop, audience silhouettes",
+  waymo_selfie: "a back-seat selfie in a driverless robotaxi (unbranded), empty driver's seat in frame, night city lights as bokeh",
+  coffee_shop_laptop: "a coffee-shop shot: a founder hunched over a laptop seen from behind the screen (lid only), plain mug, three chargers",
+  rto_badge_line: "a return-to-office morning: a queue of tired engineers at plain glass turnstiles, blank lobby walls",
+  dolores_park: "Dolores Park on a sunny afternoon, someone 'working' on a laptop on the grass, city skyline soft behind",
+  server_room: "a server room: someone in the aisle between blinking unlabelled racks, holding a single sad cable",
+  rooftop_party: "a startup rooftop party at golden hour, someone explaining their pivot to a polite stranger, skyline bokeh",
+  vc_coffee: "a pitch over coffee at a minimalist cafe, the founder leaning in, the investor checking a phone (screen not visible)",
+  office_kitchen: "an office kitchen at midnight, someone raiding a wall of unlabelled snack jars, fridge light on their face",
+  elevator_mirror: "a mirror selfie in a glass office-tower elevator, phone back to the mirror (no logo), tired eyes",
+  laundromat_night: "a laundromat at 11pm, waiting on the dryer, laptop closed on their lap, fluorescent hum",
+  fog_overlook: "a windy fog overlook above the bay, hoodie strings flying, bridge towers barely visible in the fog",
 };
 // Photo styles for the scenarios (photorealistic only)
 export const AD_PHOTO_STYLES = {

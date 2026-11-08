@@ -2,6 +2,7 @@
 // events, and the ad pillar's priority. Pure; a temp folder stands in for the repo root.
 //   node creative/creative_test.mjs
 import assert from "node:assert/strict";
+process.env.ADS_REVIEW_STRICT = "1";   // these checks cover the strict gate; the loose default is in phase8_test.mjs
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";

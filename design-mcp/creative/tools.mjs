@@ -35,6 +35,7 @@ import { storeCatalog, STORE_HOSTS } from "./catalog.mjs";
 import { STYLES, STYLE_IDS, AD_FORMATS, AD_FORMAT_IDS, AD_PHOTO_STYLES, AD_PHOTO_STYLE_IDS, pickStyle } from "../designs/styles.mjs";
 import { testMode, latestPlan, savePlan, loadAds, mutateAds, adsToday, videosStartedToday, newId, MAX_IMAGE_ADS_PER_DAY, MAX_VIDEO_ADS_PER_DAY, lastKind, setLastKind, pickKind, unadvertised, pickFeature } from "./ledger.mjs";
 import { composeVideo, headlineCheck, VIDEO_NO_TEXT, STORE_HOST } from "./video_compose.mjs";
+import { adRefFiles, adImagePrompt, generateAdImage, SCENE_NO_TEXT } from "./ad_image.mjs";
 
 const run = promisify(execFile);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -75,12 +76,23 @@ Comedy can be edgy and dark; that's allowed. Only the hard lines above and accur
 End with exactly one line: RESULT: {"pass":true|false,"photorealistic":true|false,"garment_worn_centre":true|false,"no_third_party_branding":true|false,"print_matches":true|false|null,"no_extra_text":true|false,"product_accurate":true|false|null,"text_legible":true|false|null,"real_person":true|false,"real_names":true|false,"other_logos":true|false,"slurs_or_protected_group":true|false,"tragedy":true|false,"quality":"good|ok|bad","reasons":"<one or two sentences>"}`;
 }
 // Code decides: the reviewer's pass AND no hard-line flag AND accuracy not false AND quality not bad.
-export function verdict(r) {
+// ADS_REVIEW_STRICT=0 (default, John Sat 18:40: "just loosen the gate, we just need to put stuff out there"): only the hard
+// lines, third-party branding, a person wearing the garment as the centre, and photorealism block. Print accuracy and stray
+// text are logged as warnings and kept in the verdict. ADS_REVIEW_STRICT=1: every check blocks, as before.
+export const reviewStrict = () => process.env.ADS_REVIEW_STRICT === "1";
+const BLOCKING_LOOSE = ["photorealistic", "garment_worn_centre", "no_third_party_branding"];
+const ALL_CHECKS = ["product_accurate", "text_legible", "photorealistic", "garment_worn_centre", "print_matches", "no_extra_text", "no_third_party_branding"];
+export function verdict(r, { strict = reviewStrict() } = {}) {
   if (!r || typeof r !== "object") return { pass: false, reasons: "no parsable verdict" };
   const lines = ["real_person", "real_names", "other_logos", "slurs_or_protected_group", "tragedy"].filter((k) => r[k] === true);
-  const acc = ["product_accurate", "text_legible", "photorealistic", "garment_worn_centre", "print_matches", "no_extra_text", "no_third_party_branding"].filter((k) => r[k] === false);
-  const pass = r.pass === true && !lines.length && !acc.length && r.quality !== "bad";
-  return { pass, hard_lines: lines, failed_checks: acc, quality: r.quality || null, reasons: r.reasons || "" };
+  const acc = ALL_CHECKS.filter((k) => r[k] === false);
+  if (strict) {
+    const pass = r.pass === true && !lines.length && !acc.length && r.quality !== "bad";
+    return { pass, hard_lines: lines, failed_checks: acc, warnings: [], quality: r.quality || null, reasons: r.reasons || "", gate: "strict" };
+  }
+  const blocking = acc.filter((k) => BLOCKING_LOOSE.includes(k)), warnings = acc.filter((k) => !BLOCKING_LOOSE.includes(k));
+  const pass = !lines.length && !blocking.length;
+  return { pass, hard_lines: lines, failed_checks: blocking, warnings, quality: r.quality || null, reasons: r.reasons || "", gate: "loose" };
 }
 
 export function registerCreativeTools(server, ctx) {
@@ -241,16 +253,66 @@ export function registerCreativeTools(server, ctx) {
     const style = pickStyle(hist.map((h) => h.style).filter((x) => AD_PHOTO_STYLES[x]), Math.random, AD_PHOTO_STYLE_IDS);
     mutateAds(ctx.rootDir, (x) => { setLastKind(x, kind); (x.pending_formats ||= []).push({ format, style, kind, feature: feature?.slug || null, at: new Date().toISOString(), test: testMode() }); x.pending_formats = x.pending_formats.slice(-6); });
     const refs = [printUrlOf(feature), feature.image].filter(Boolean);
-    const photo = "A PHOTOREALISTIC photo (" + AD_PHOTO_STYLES[style] + ") of a fictional person WEARING the featured " + (feature.garment || "garment") + ", the garment the clear centre of the frame, its print exactly as in the reference images and legible. Scenario: " + AD_FORMATS[format] + ". No other text anywhere in the image (no captions, signs, screens with writing, other logos). All props unbranded and generic: plain cups, no logos on laptops, phones, signs, bags or cars. Fictional people only.";
+    const photo = "A PHOTOREALISTIC photo (" + AD_PHOTO_STYLES[style] + ") of a fictional person WEARING the featured " + (feature.garment || "garment") + ", the garment the clear centre of the frame, its print exactly as in the reference images and legible. Scenario: " + AD_FORMATS[format] + ". " + SCENE_NO_TEXT;
     const how = kind === "video"
-      ? "VIDEO: generate_image the photo below (aspect 9:16, image_urls = reference_images + brand_refs.logo), then ad_video_start with SUBTLE natural motion (breathing, a glance, steam, light flicker; the garment and its print stay steady and in frame), ad_video_status until done, then ad_video_compose with a headline (<= 8 words, the punchline) and featured_slug; ad_review the COMPOSED file_id as kind video; ad_submit."
-      : "IMAGE: generate_image the photo below (aspect 4:5, image_urls = reference_images + brand_refs.logo); the joke is the situation, the words go in the caption. ad_review (kind image, featured_slug), ad_submit.";
+      ? "VIDEO: ad_image_generate (featured_slug, scenario, photo_style, prompt) and ad_image_status until it gives a file_id; ad_review it as kind image; only when it PASSES: ad_video_start from it with SUBTLE natural motion (breathing, a glance, steam, light flicker; the garment and its print stay steady and in frame), ad_video_status until done, ad_video_compose with a headline (<= 8 words, the punchline) and featured_slug; ad_review the COMPOSED file_id as kind video; ad_submit."
+      : "IMAGE: ad_image_generate (featured_slug, scenario, photo_style, prompt) and ad_image_status until it gives a file_id; the joke is the situation, the words go in the caption. ad_review (kind image, featured_slug), ad_submit.";
     return txt({ kind, scenario: format, what: AD_FORMATS[format], photo_style: style, photo_style_how: AD_PHOTO_STYLES[style], image_prompt_base: photo, recent_scenarios: hist.slice(-5).map((h) => h.format),
       feature: { slug: feature.slug, name: feature.name, garment: feature.garment || null, image: feature.image, print_url: printUrlOf(feature), url: feature.url, price: feature.price || null, why: pick.why,
         rule: "EVERY ad features this product, worn: featured_products [slug]." + (pick.why.startsWith("new") ? " It's a new agent design: say it's new / a pre-order in the caption." : "") },
       reference_images: refs,
       how, variants: imageVariants(ctx.rootDir), max_attempts: maxAttempts(ctx.rootDir), ...(videoPaused(ctx.rootDir) ? { spend_guard: "spend is high: 1 image, 1 try per concept, no video" } : {}),
       note: "Pass format (= scenario) and kind to ad_submit. AI-generated people only, no real faces or likenesses, no other brands' logos." });
+  });
+
+  // ---------------- Creative: photoreal ad image (OpenAI edits with the real print + mockups) ----------------
+  const imageJobs = new Map();   // job_id -> { state, file_id?, error?, started }
+  server.registerTool("ad_image_generate", {
+    title: "Make a photoreal ad photo of our product being worn (start)",
+    description: "Generates the ad photo server-side with OpenAI image edits, using the featured product's REAL print file and store mockups as input images (much more exact prints than generate_image). Code appends: photoreal, the garment worn and centred, the print exactly as referenced, no readable text anywhere else, unbranded props, out-of-focus background. Takes ~1-2 minutes: poll ad_image_status with the job_id; it returns a fil_ id for ad_review.",
+    inputSchema: { featured_slug: z.string().max(80), scenario: z.string().max(60).describe("next_ad_format's scenario"), photo_style: z.string().max(40).describe("next_ad_format's photo_style"),
+      prompt: z.string().min(20).max(1200).describe("your specifics: the person (fictional), pose, moment, light, framing") },
+  }, async ({ featured_slug, scenario, photo_style, prompt }) => {
+    try {
+      if (!ctx.openaiKey) return err("OPENAI_API_KEY is not set; use generate_image as the fallback");
+      const product = (await storeCatalog(ctx.rootDir)).find((p) => p.slug === featured_slug);
+      if (!product) return err(`no product ${featured_slug} in the store catalog`);
+      const sc = AD_FORMATS[scenario] || scenario, ps = AD_PHOTO_STYLES[photo_style] || photo_style;
+      const hits = findBanned({ prompt }, ["real_people", "trademarks", "tragedy"]);
+      if (hits.length) return err(`refused by the hard lines: ${hits.map((h) => `"${h.term}" (${h.list})`).join(", ")}`);
+      const printPath = product.design_id ? path.join(ctx.outDir, `${product.design_id}.png`) : null;
+      const files = await adRefFiles(ctx.rootDir, product, { printPath });
+      if (!files.length) return err(`no reference images for ${featured_slug}`);
+      const full = adImagePrompt({ product, scenario: sc, photoStyle: ps, prompt });
+      const job_id = newId("aimg");
+      const job = { state: "running", started: Date.now(), slug: featured_slug };
+      imageJobs.set(job_id, job);
+      (async () => {
+        try {
+          const g = await generateAdImage(ctx.openaiKey, full, files);
+          fs.mkdirSync(ctx.outDir, { recursive: true });
+          const local = path.join(ctx.outDir, `${job_id}.jpg`); fs.writeFileSync(local, g.jpg);
+          const file_id = await uploadToNaive(g.jpg, `${job_id}.jpg`, "image/jpeg");
+          mutateAds(ctx.rootDir, (x) => { (x.ad_images ||= {})[file_id] = { file_id, job_id, slug: featured_slug, scenario, photo_style, model: g.model, local, refs: files.map((f) => path.basename(f)), at: new Date().toISOString(), test: testMode() }; });
+          Object.assign(job, { state: "done", file_id, model: g.model });
+          log(`[ad_image_generate] ${job_id} ${featured_slug} ${scenario} -> ${file_id} (${g.model})`);
+        } catch (e) { Object.assign(job, { state: "failed", error: e.message }); log(`[ad_image_generate] ${job_id} failed: ${e.message}`); }
+      })();
+      return txt({ job_id, state: "running", references: files.map((f) => path.basename(f)), next: "call ad_image_status with this job_id (each call waits up to a minute)" });
+    } catch (e) { return err("ad_image_generate failed: " + e.message); }
+  });
+
+  server.registerTool("ad_image_status", {
+    title: "Is the ad photo ready?",
+    description: "Waits up to 60 s for an ad_image_generate job, then returns its fil_ id (send it to ad_review as kind image) or that it's still running / failed.",
+    inputSchema: { job_id: z.string().regex(/^aimg_[a-z0-9]+$/) },
+  }, async ({ job_id }) => {
+    const job = imageJobs.get(job_id);
+    if (!job) return err(`no image job ${job_id} (the server may have restarted: start a new one)`);
+    for (let i = 0; i < 12 && job.state === "running"; i++) await sleep(5000);
+    if (job.state === "done") return txt({ state: "done", file_id: job.file_id, model: job.model, next: "ad_review with this file_id (kind image, featured_slug)" });
+    if (job.state === "failed") return err(`image generation failed: ${job.error}. Try again with a simpler scene, or fall back to generate_image.`);
+    return txt({ state: "running", seconds: Math.round((Date.now() - job.started) / 1000), note: "still generating; call again" });
   });
 
   server.registerTool("ad_video_start", {
@@ -261,6 +323,8 @@ export function registerCreativeTools(server, ctx) {
   }, async ({ image_file_id, prompt, model = VIDEO_MODELS[0], aspect_ratio = "9:16", seconds = 5 }) => {
     try {
       const l = loadAds(ctx.rootDir);
+      if (!Object.values(l.reviews).some((r) => r.file_id === image_file_id && r.kind === "image" && r.pass && !!r.test === testMode()))
+        return err("refused: animate only an image that PASSED ad_review (kind image); review it first");
       await checkSpend({ rootDir: ctx.rootDir, vettaKey: ctx.vettaKey, log }).catch(() => null);
       if (videoPaused(ctx.rootDir)) return err(`refused: the spend guard paused video ads (Naïve spend since Sat 13:00 PT is over $${CUT_AT()}); make image ads`);
       const today = videosStartedToday(l);
@@ -385,7 +449,7 @@ export function registerCreativeTools(server, ctx) {
           const vd = verdict(parsed);
           const done = { ...vd, raw: parsed, review_text: last.slice(-1500), cost_usd: st.consumed_micro_usd / 1e6, done_at: new Date().toISOString() };
           mutateAds(ctx.rootDir, (x) => Object.assign(x.reviews[review_id], done));
-          log(`[ad_review] ${review_id} ${vd.pass ? "PASS" : "FAIL"}: ${vd.reasons.slice(0, 200)}`);
+          log(`[ad_review] ${review_id} ${vd.pass ? "PASS" : "FAIL"} (${vd.gate} gate)${vd.warnings?.length ? ` warnings: ${vd.warnings.join(", ")}` : ""}: ${vd.reasons.slice(0, 200)}`);
           return txt({ review_id, file_id: r.file_id, ...vd, next: vd.pass ? "ad_submit with this file_id and review_id" : "fix it and make a new asset" });
         }
         await sleep(5000);

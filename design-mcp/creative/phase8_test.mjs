@@ -73,8 +73,23 @@ console.log("phase 8 tests: all OK");
   assert.ok(Object.values(AD_PHOTO_STYLES).every((t) => /photo|film|iPhone/i.test(t)));
   const good = { pass: true, photorealistic: true, garment_worn_centre: true, print_matches: true, no_extra_text: true, product_accurate: true, text_legible: true, real_person: false, real_names: false, other_logos: false, slurs_or_protected_group: false, tragedy: false, quality: "good" };
   assert.equal(verdict(good).pass, true);
-  for (const k of ["photorealistic", "garment_worn_centre", "print_matches", "no_extra_text", "no_third_party_branding"]) assert.equal(verdict({ ...good, [k]: false }).pass, false, k);
+  for (const k of ["photorealistic", "garment_worn_centre", "print_matches", "no_extra_text", "no_third_party_branding"]) assert.equal(verdict({ ...good, [k]: false }, { strict: true }).pass, false, k);   // strict gate
   const b = reviewBrief({ kind: "image", files: ["fil_1"], refs: [], concept: "c", caption: "cap", featured: { name: "x", slug: "x" } });
   assert.match(b, /PHOTOREALISTIC/); assert.match(b, /garment_worn_centre/); assert.match(b, /print_matches/);
   console.log("photoreal: feature rotation, scenarios, reviewer checks: OK");
+}
+
+// loose gate (ADS_REVIEW_STRICT=0, default): print/text issues are warnings; hard lines, branding, worn+centre, photoreal block
+{
+  const { verdict } = await import("./tools.mjs");
+  const g = { pass: false, photorealistic: true, garment_worn_centre: true, print_matches: false, no_extra_text: false, text_legible: false, product_accurate: false, no_third_party_branding: true, real_person: false, real_names: false, other_logos: false, slurs_or_protected_group: false, tragedy: false, quality: "ok" };
+  delete process.env.ADS_REVIEW_STRICT;
+  const v = verdict(g);
+  assert.equal(v.pass, true); assert.equal(v.gate, "loose"); assert.deepEqual(v.warnings.sort(), ["no_extra_text", "print_matches", "product_accurate", "text_legible"]);
+  for (const k of ["photorealistic", "garment_worn_centre", "no_third_party_branding"]) assert.equal(verdict({ ...g, [k]: false }).pass, false, k);
+  for (const k of ["real_person", "real_names", "other_logos", "slurs_or_protected_group", "tragedy"]) assert.equal(verdict({ ...g, [k]: true }).pass, false, k);
+  assert.equal(verdict(null).pass, false);
+  assert.equal(verdict(g, { strict: true }).pass, false);
+  process.env.ADS_REVIEW_STRICT = "1"; assert.equal(verdict(g).pass, false); delete process.env.ADS_REVIEW_STRICT;
+  console.log("loose review gate: OK");
 }
