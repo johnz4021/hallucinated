@@ -61,5 +61,11 @@ inbox-ledger.json
 stripe-flagged.json
 preorders-ledger.json
 design-proposals.json
+plans.json
+ads.json
 *.tmp
 scout-queue.json
+
+# /hq mission-control publisher (built output + cache)
+hq.json
+hq-cache.json

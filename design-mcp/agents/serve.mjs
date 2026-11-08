@@ -116,6 +116,16 @@ async function clearHolds() {
 let clearing = false;
 setInterval(async () => { if (clearing) return; clearing = true; try { await clearHolds(); } catch (e) { log("[holds] " + e.message); } finally { clearing = false; } }, 10_000);
 
+// [hq] mission-control publisher (agents/hq_publish.mjs): every 60 s, one run at a time, loaded lazily so a broken
+// publisher can never take serve down. One log line per push or failure; unchanged documents are skipped quietly.
+let hqBusy = false;
+setInterval(async () => {
+  if (hqBusy) return; hqBusy = true;
+  try { const r = await (await import("./hq_publish.mjs")).publishHq({ rootDir: ROOT }); if (r.pushed) log(`[hq] pushed ${r.events} events (${r.bytes} bytes, ${r.ms} ms)`); }
+  catch (e) { log(`[hq] push failed: ${String(e.message).slice(0, 200)}`); }
+  finally { hqBusy = false; }
+}, 60_000).unref();
+
 const stop = () => { try { fs.unlinkSync(STATE); } catch {} try { tunnel.stop(); } catch {} server.close(); log("== serve stopped"); process.exit(0); };
 process.on("SIGINT", stop); process.on("SIGTERM", stop); process.on("SIGHUP", stop);
 log("serve is up. Leave this window open; close it (or Ctrl-C) to stop the tools.");
