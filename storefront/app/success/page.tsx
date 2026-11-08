@@ -10,8 +10,8 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Thanks", robots: { index: false } };
 
 type View =
-  | { kind: "order"; name: string | null; email: string | null; total: number; currency: string; lines: string[]; fulfilment: "ship" | "pickup" | null }
-  | { kind: "preorder"; name: string | null; email: string | null; total: number; window: string; lines: string[]; fulfilment: string | null; shippingCents: number };
+  | { kind: "order"; name: string | null; email: string | null; total: number; currency: string; lines: string[]; fulfilment: "ship" | "pickup" | null; priceIds: string[] }
+  | { kind: "preorder"; name: string | null; email: string | null; total: number; window: string; lines: string[]; fulfilment: string | null; shippingCents: number; priceIds: string[] };
 
 async function load(id?: string): Promise<View | null> {
   if (!id || !/^cs_(test|live)_[A-Za-z0-9]+$/.test(id)) return null;
@@ -28,7 +28,7 @@ async function load(id?: string): Promise<View | null> {
           return `${it.qty} × ${(p.product as Stripe.Product).name}, ${p.metadata.size === "OS" ? "one size" : `size ${p.metadata.size}`}`;
         }),
       );
-      return { kind: "preorder", name, email, total: Number(s.metadata?.preorder_total ?? 0), window: datedWindows((s.metadata?.launch_window ?? "").split(", ")), lines, fulfilment: s.metadata?.fulfilment ?? null, shippingCents: Number(s.metadata?.preorder_shipping ?? 0) };
+      return { kind: "preorder", name, email, total: Number(s.metadata?.preorder_total ?? 0), window: datedWindows((s.metadata?.launch_window ?? "").split(", ")), lines, fulfilment: s.metadata?.fulfilment ?? null, shippingCents: Number(s.metadata?.preorder_shipping ?? 0), priceIds: items.map((it) => it.price_id) };
     }
     if (s.mode === "payment" && s.payment_status === "paid") {
       const lines = (s.line_items?.data ?? []).map((li) => {
@@ -44,7 +44,8 @@ async function load(id?: string): Promise<View | null> {
         const pi = typeof s.payment_intent === "string" ? s.payment_intent : s.payment_intent?.id;
         if (pi) await stripe.paymentIntents.update(pi, { metadata: { fulfilment } }).catch(() => {});
       }
-      return { kind: "order", name, email, total: s.amount_total ?? 0, currency: s.currency ?? config.currency, lines, fulfilment };
+      const priceIds = (s.line_items?.data ?? []).map((li) => (li.price as Stripe.Price | null)?.id).filter((x): x is string => !!x);
+      return { kind: "order", name, email, total: s.amount_total ?? 0, currency: s.currency ?? config.currency, lines, fulfilment, priceIds };
     }
   } catch {}
   return null;
@@ -55,7 +56,7 @@ export default async function Success({ searchParams }: { searchParams: Promise<
   const first = v?.name?.split(" ")[0];
   return (
     <div className="wrap page note-page">
-      <ClearCart />
+      <ClearCart priceIds={v?.priceIds ?? []} />
       <h1 className="mono-title">
         <span className="prompt" aria-hidden="true">&gt;</span> {v?.kind === "preorder" ? "git stash save \"pre-order\"" : "git commit -m \"bought the shirt\""}
       </h1>

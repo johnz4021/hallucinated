@@ -5,12 +5,13 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { config, datedWindows, localImage } from "@/lib/config";
 import { money, useCart } from "./cart";
+import { startCheckout } from "./checkout-client";
 
 export default function CartView({ fulfilment: fulfilmentNote, contact }: { fulfilment: string; contact: string }) {
   const cart = useCart();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [fulfilment, setFulfilment] = useState<"ship" | "pickup" | null>(null);
+  const [fulfilment, setFulfilment] = useState<"ship" | "pickup" | null>("ship");
   // The server decides pre-order vs buy-now from Stripe; if it asks for a choice the bag didn't expect
   // (stale or mismatched bag), show the choice instead of a dead-end error.
   const [needChoice, setNeedChoice] = useState(false);
@@ -24,6 +25,19 @@ export default function CartView({ fulfilment: fulfilmentNote, contact }: { fulf
     setChecked(true);
     reconcile().then((n) => n.length && setNotes(n));
   }, [ready, checked, reconcile]);
+
+  // Mixed bag: check out one kind on its own, leaving the rest of the bag where it is.
+  async function checkoutKind(k: "live" | "preorder") {
+    setBusy(true);
+    setError(null);
+    try {
+      const lines = cart.lines.filter((l) => l.kind === k);
+      await startCheckout(lines.map((l) => ({ price_id: l.priceId, quantity: l.qty })), k === "preorder" ? fulfilment ?? "ship" : null);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Checkout didn't open. Try again.");
+      setBusy(false);
+    }
+  }
 
   async function checkout() {
     setBusy(true);
@@ -69,7 +83,7 @@ export default function CartView({ fulfilment: fulfilmentNote, contact }: { fulf
       </div>
     );
 
-  const pre = cart.kind === "preorder" || needChoice;
+  const pre = cart.kind === "preorder" || needChoice || new Set(cart.lines.map((l) => l.kind)).size > 1;
   const mixed = new Set(cart.lines.map((l) => l.kind)).size > 1;
   const shipFee = config.shipping.rates.ship.amount;
   const freeOver = config.shipping.free_threshold;
@@ -109,9 +123,15 @@ export default function CartView({ fulfilment: fulfilmentNote, contact }: { fulf
           </div>
         )}
         {mixed && (
-          <p className="error" role="alert">
-            Your bag has in-stock items and pre-orders. They check out separately: remove one kind, check out, then add it back.
-          </p>
+          <div className="mixed-split" role="status">
+            <p>In-stock items and pre-orders check out separately. Your bag stays as it is.</p>
+            <button type="button" className="cta" onClick={() => checkoutKind("preorder")} disabled={busy}>
+              Check out the pre-order{cart.lines.filter((l) => l.kind === "preorder").length > 1 ? "s" : ""} on {cart.lines.filter((l) => l.kind === "preorder").length > 1 ? "their" : "its"} own
+            </button>
+            <button type="button" className="btn-secondary" onClick={() => checkoutKind("live")} disabled={busy}>
+              Check out the in-stock item{cart.lines.filter((l) => l.kind === "live").length > 1 ? "s" : ""} on {cart.lines.filter((l) => l.kind === "live").length > 1 ? "their" : "its"} own
+            </button>
+          </div>
         )}
         <div className="sum-row">
           <span>{pre ? "Charged at launch" : "Subtotal"}</span>
@@ -140,12 +160,12 @@ export default function CartView({ fulfilment: fulfilmentNote, contact }: { fulf
           {pre
             ? `We save your card now and charge ${money(cart.subtotal)}${
                 fulfilment === "ship" && cart.subtotal < freeOver ? ` + ${money(shipFee)} shipping` : ""
-              } only if it launches${windows ? ` (est. ${windows})` : ""}. Never launches, never charged. Checkout asks for your address either way; we only use it if we ship. Cancel before launch: ${contact}.`
+              } only if it launches${windows ? ` (est. ${windows})` : ""}. Never launches, never charged. ${fulfilment === "pickup" ? "No address needed for pickup." : "Checkout asks where to ship it."} Cancel before launch: ${contact}.`
             : fulfilmentNote}
         </p>
-        <button type="button" className="cta" onClick={checkout} disabled={busy || mixed || (pre && !fulfilment)}>
-          {busy ? "Opening checkout…" : pre ? (fulfilment ? "Save card and pre-order" : "Choose shipping or pickup") : "Check out"}
-        </button>
+        {!mixed && <button type="button" className="cta" onClick={checkout} disabled={busy || (pre && !fulfilment)}>
+          {busy ? "Opening checkout…" : pre ? (fulfilment ? "Pre-order now" : "Choose shipping or pickup") : "Check out"}
+        </button>}
         {error && <p className="error" role="alert">{error}</p>}
       </aside>
     </div>

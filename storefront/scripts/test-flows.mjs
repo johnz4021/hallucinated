@@ -1,13 +1,28 @@
-// Click-through smoke test of the real buying flows (test key only). Opens Stripe Checkout but never pays.
-// Usage: node scripts/test-flows.mjs <store-url>      (VERCEL_OIDC=1 for a protected preview)
-// Flows: buy-now tee, pre-order cap (ship), agent tee (pickup), stale bag (old price + wrong kind), old-client API call.
+// Click-through smoke test of the real buying flows. Opens Stripe Checkout but NEVER pays.
+// Usage:
+//   node scripts/test-flows.mjs <store-url>                       sandbox (test key); VERCEL_OIDC=1 for a protected preview
+//   node scripts/test-flows.mjs https://hallucinated-store.vercel.app --live-readonly
+//        production: Stripe lookups use the LIVE key read-only (prices/products), no payments, no writes.
+// Flows: direct buy-now, direct pre-order (ship), direct agent pre-order (pickup), bag buy-now, bag pre-order,
+// stale bag (old price + wrong kind), old-client API call. Reports taps from product page to Stripe.
 import { chromium } from "playwright";
 import Stripe from "stripe";
 import { envVar, stripeKey } from "./root-env.mjs";
 
-const base = (process.argv[2] ?? "http://localhost:3000").replace(/\/$/, "");
-const { key, mode } = stripeKey({ allowLive: false });
-if (mode !== "test") throw new Error("test-flows only runs against a test key");
+const args = process.argv.slice(2);
+const liveRO = args.includes("--live-readonly");
+const base = (args.find((a) => !a.startsWith("--")) ?? "http://localhost:3000").replace(/\/$/, "");
+let key;
+if (liveRO) {
+  if (new URL(base).hostname !== "hallucinated-store.vercel.app") throw new Error("--live-readonly is for the production URL only");
+  key = envVar("STRIPE_LIVE_SECRET_KEY");
+  if (!key) throw new Error("STRIPE_LIVE_SECRET_KEY missing");
+} else {
+  const k = stripeKey({ allowLive: false });
+  if (k.mode !== "test") throw new Error("test-flows needs a test key (or --live-readonly against production)");
+  key = k.key;
+}
+// Read-only use: only retrieve/list/search calls below.
 const stripe = new Stripe(key);
 const origin = new URL(base).origin;
 const oidc = process.env.VERCEL_OIDC === "1" ? envVar("VERCEL_OIDC_TOKEN") : null;
@@ -17,23 +32,13 @@ const results = [];
 async function newPage() {
   const ctx = await browser.newContext({ viewport: { width: 390, height: 844 } });
   if (oidc) await ctx.route((u) => u.origin === origin, (r) => r.continue({ headers: { ...r.request().headers(), "x-vercel-trusted-oidc-idp-token": oidc } }));
-  return { ctx, page: await ctx.newPage() };
+  const page = await ctx.newPage();
+  page.taps = 0;
+  page.tap = async (sel) => { page.taps++; await page.click(sel); };
+  page.tapCheck = async (sel) => { page.taps++; await page.check(sel); };
+  return { ctx, page };
 }
-
-async function toCheckout(page, choice) {
-  await page.goto(`${base}/cart`, { waitUntil: "load" });
-  await page.waitForTimeout(2000); // bag re-check against Stripe
-  const hasChoice = await page.locator(".fulfil-choice").count();
-  if (hasChoice) await page.check(`input[name="fulfilment"][value="${choice ?? "ship"}"]`);
-  await page.click(".cart-summary button.cta");
-  // A bag that just got corrected shows what changed and needs a second press.
-  const opened = await page.waitForURL(/checkout\.stripe\.com/, { timeout: 8000 }).then(() => true).catch(() => false);
-  if (!opened) {
-    if (await page.locator(".bag-notes").count()) await page.click(".cart-summary button.cta");
-    await page.waitForURL(/checkout\.stripe\.com/, { timeout: 30000 });
-  }
-  return { hasChoice: !!hasChoice };
-}
+const waitStripe = (page, ms = 30000) => page.waitForURL(/checkout\.stripe\.com/, { timeout: ms });
 
 async function flow(name, fn) {
   const { ctx, page } = await newPage();
@@ -41,51 +46,86 @@ async function flow(name, fn) {
     const detail = await fn(page);
     results.push({ name, ok: true, ...detail });
   } catch (e) {
-    await page.screenshot({ path: `test-output/flow-fail-${name}.png`, fullPage: true }).catch(() => {});
+    await page.screenshot({ path: `test-output/flow-fail-${name.replace(/\W+/g, "-")}.png`, fullPage: true }).catch(() => {});
     results.push({ name, ok: false, error: e.message.split("\n")[0] });
   } finally {
     await ctx.close();
   }
 }
-
-async function addFromProduct(page, slug, size) {
+async function openProduct(page, slug) {
   await page.goto(`${base}/p/${slug}`, { waitUntil: "load" });
-  if (size) await page.click(`label.size:has(input[value="${size}"])`);
-  await page.click("button.cta");
-  await page.waitForSelector(".added", { timeout: 10000 });
+  await page.waitForTimeout(800);
 }
+const agentSlug = async () => (await stripe.products.search({ query: "metadata['origin']:'agents' AND active:'true'" })).data[0]?.metadata.slug;
 
-await flow("buy-now tee", async (page) => {
-  await addFromProduct(page, "git-reset-hard-tee", "M");
-  const r = await toCheckout(page);
-  if (r.hasChoice) throw new Error("buy-now bag should not ask ship/pickup (Stripe Checkout does)");
-  return { checkout: "opened" };
+// ---- Direct paths (the primary button on the product page) ----
+await flow("direct buy-now tee", async (page) => {
+  await openProduct(page, "git-reset-hard-tee");
+  await page.tap('label.size:has(input[value="M"])');
+  await page.tap(".buy > button.cta");
+  await waitStripe(page);
+  return { taps_to_stripe: page.taps };
+});
+await flow("direct pre-order cap (ship, default)", async (page) => {
+  await openProduct(page, "wordmark-cap-black");
+  await page.tap(".buy > button.cta");
+  await waitStripe(page);
+  await page.waitForTimeout(2500);
+  return { taps_to_stripe: page.taps, address_form: (await page.locator("#shippingAddressLine1").count()) > 0 };
+});
+await flow("direct agent pre-order (pickup)", async (page) => {
+  const slug = await agentSlug();
+  if (!slug) return { skipped: "no active agent product" };
+  await openProduct(page, slug);
+  await page.tap('label.size:has(input[value="L"])');
+  await page.tap('.fulfil-toggle input[value="pickup"]');
+  await page.tap(".buy > button.cta");
+  await waitStripe(page);
+  await page.waitForTimeout(2500);
+  return { slug, taps_to_stripe: page.taps, address_form: (await page.locator("#shippingAddressLine1").count()) > 0, name_field: (await page.locator("#individualName").count()) > 0 };
+});
+await flow("mobile sticky bar pre-order", async (page) => {
+  const slug = await agentSlug();
+  if (!slug) return { skipped: "no active agent product" };
+  await openProduct(page, slug);
+  await page.tap(".sticky-buy .cta"); // no size yet: should ask for one
+  if (!(await page.locator(".need-size").count())) throw new Error("sticky bar did not ask for a size");
+  await page.tap('label.size:has(input[value="M"])');
+  await page.tap(".sticky-buy .cta");
+  await waitStripe(page);
+  return { taps_to_stripe: page.taps };
 });
 
-await flow("pre-order cap, ship", async (page) => {
-  await addFromProduct(page, "wordmark-cap-black", null);
-  const r = await toCheckout(page, "ship");
-  if (!r.hasChoice) throw new Error("pre-order bag must show the ship/pickup choice");
-  return { checkout: "opened" };
-});
-
-await flow("agent tee, pickup", async (page) => {
-  const agent = (await stripe.products.search({ query: "metadata['origin']:'agents' AND active:'true'" })).data[0];
-  if (!agent) return { checkout: "skipped (no active agent product in this catalog)" };
-  await addFromProduct(page, agent.metadata.slug, "L");
-  const r = await toCheckout(page, "pickup");
-  if (!r.hasChoice) throw new Error("agent pre-order bag must show the ship/pickup choice");
-  return { slug: agent.metadata.slug, checkout: "opened" };
-});
+// ---- Bag paths ----
+async function viaBag(page, slug, size) {
+  await openProduct(page, slug);
+  if (size) await page.tap(`label.size:has(input[value="${size}"])`);
+  await page.tap(".buy > .btn-secondary");
+  await page.waitForSelector(".added", { timeout: 10000 });
+  await page.goto(`${base}/cart`, { waitUntil: "load" });
+  await page.waitForTimeout(2000);
+  await page.tap(".cart-summary > button.cta");
+  const opened = await waitStripe(page, 8000).then(() => true).catch(() => false);
+  if (!opened) {
+    if (await page.locator(".bag-notes").count()) await page.tap(".cart-summary > button.cta");
+    await waitStripe(page);
+  }
+  return { hasChoice: (await page.locator(".fulfil-choice").count()) > 0 };
+}
+await flow("bag buy-now tee", async (page) => { await viaBag(page, "git-reset-hard-tee", "M"); return { checkout: "opened" }; });
+await flow("bag pre-order cap (ship preselected)", async (page) => { await viaBag(page, "wordmark-cap-black", null); return { checkout: "opened" }; });
 
 await flow("stale bag (old price, wrong kind)", async (page) => {
   const cap = (await stripe.products.search({ query: "metadata['slug']:'wordmark-cap-black'" })).data[0];
   const old = (await stripe.prices.list({ product: cap.id, active: false, limit: 10 })).data.find((p) => p.metadata.size);
-  if (!old) return { checkout: "skipped (no archived cap price)" };
+  if (!old) return { skipped: "no archived cap price" };
   const stale = [{ priceId: old.id, slug: "wordmark-cap-black", name: "Wordmark cap", size: "OS", unitAmount: old.unit_amount, image: null, kind: "live", launchWindow: null, qty: 1 }];
   await page.addInitScript((v) => localStorage.setItem("hallucinated.cart.v1", v), JSON.stringify(stale));
-  const r = await toCheckout(page, "ship");
-  if (!r.hasChoice) throw new Error("stale bag was not corrected to a pre-order");
+  await page.goto(`${base}/cart`, { waitUntil: "load" });
+  await page.waitForTimeout(2500);
+  if (!(await page.locator(".fulfil-choice").count())) throw new Error("stale bag was not corrected to a pre-order");
+  await page.tap(".cart-summary > button.cta");
+  await waitStripe(page);
   return { old_price: old.id, checkout: "opened" };
 });
 

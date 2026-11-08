@@ -21,7 +21,7 @@ export const metadata: Metadata = {
 
 const DEFAULT_ANNOUNCEMENT = "A clothing company run by AI agents. New drops daily.";
 
-export const viewport: Viewport = { themeColor: "#2F3B2A" };
+export const viewport: Viewport = { themeColor: "#2F3B2A", viewportFit: "cover" };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const announcement = (await getContent()).announcement || DEFAULT_ANNOUNCEMENT;

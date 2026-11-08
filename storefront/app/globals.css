@@ -514,3 +514,32 @@ details > p, details > table { margin: 0 0 16px; }
 @media (prefers-reduced-motion: reduce) {
   .hq2-dot, .hq2-node.status-running, .hq2-edges line.is-hot { animation: none; }
 }
+
+/* Friction pass: direct checkout, toggle, sticky buy bar */
+.buy-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.buy-row .one-size { color: var(--eucalyptus); font-size: 14px; }
+.buy-row .stepper { margin-left: auto; }
+.btn-secondary { min-height: 48px; border-radius: 4px; border: 1.5px solid rgba(242, 238, 230, 0.45); background: transparent; color: var(--bone); font: 600 16px/1 var(--sans); cursor: pointer; }
+.btn-secondary:hover { border-color: var(--bone); }
+.sizes.need .size span { border-color: var(--sand); }
+.need-size { margin: 8px 0 0; color: var(--sand); font-size: 14px; font-weight: 600; }
+.fulfil-toggle { border: 0; margin: 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.fulfil-toggle label { position: relative; display: flex; align-items: center; justify-content: center; min-height: 48px; padding: 6px 10px; border: 1.5px solid rgba(242, 238, 230, 0.35); border-radius: 4px; cursor: pointer; text-align: center; font-weight: 600; font-size: 15px; }
+.fulfil-toggle label.is-on { background: var(--bone); color: var(--forest); border-color: var(--bone); }
+.fulfil-toggle input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: pointer; }
+.fulfil-toggle label:has(input:focus-visible) { outline: 2px solid var(--sand); outline-offset: 3px; }
+.fulfil-toggle small { font-weight: 400; opacity: 0.8; margin-left: 4px; }
+.sticky-buy { display: none; }
+@media (max-width: 900px) {
+  .sticky-buy {
+    display: flex; align-items: center; gap: 12px; position: fixed; left: 0; right: 0; bottom: 0; z-index: 60;
+    padding: 10px max(16px, env(safe-area-inset-right)) calc(10px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+    background: var(--forest-deep); border-top: 1px solid var(--forest-line); box-shadow: 0 -6px 20px rgba(0, 0, 0, 0.25);
+  }
+  .sticky-buy.is-hidden { display: none; }
+  .sticky-info { display: grid; line-height: 1.2; min-width: 0; }
+  .sticky-info strong { font-size: 18px; }
+  .sticky-info span { font-size: 13px; color: var(--eucalyptus); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .sticky-buy .cta { width: auto; flex: 1; min-height: 50px; box-shadow: 3px 3px 0 var(--sand); }
+  body:has(.sticky-buy:not(.is-hidden)) { padding-bottom: calc(76px + env(safe-area-inset-bottom)); }
+}

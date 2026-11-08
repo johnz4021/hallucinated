@@ -44,17 +44,17 @@ try {
     await page.goto(`${url}/p/${it.slug}`, { waitUntil: "networkidle" });
     if (it.size) await page.click(`label.size:has(input[value="${it.size}"])`);
     for (let i = 1; i < it.qty; i++) await page.click('button[aria-label="One more"]');
-    await page.click("button.cta");
+    await page.click(".buy > .btn-secondary"); // Add to bag (the primary button goes straight to Checkout)
     await page.waitForSelector(".added", { timeout: 10000 });
   }
   await page.goto(`${url}/cart`, { waitUntil: "networkidle" });
   if (kind === "preorder") await page.check(`input[name="fulfilment"][value="${process.env.SHIP ?? "ship"}"]`);
   await page.screenshot({ path: `test-output/cart-${kind}.png`, fullPage: true });
-  await page.click(".cart-summary button.cta");
+  await page.click(".cart-summary > button.cta");
   await page.waitForURL(/checkout\.stripe\.com/, { timeout: 30000 });
 
   await page.fill("#email", email);
-  await page.fill("#individualName", name);
+  if (await page.locator("#individualName").count()) await page.fill("#individualName", name);
   if (await page.locator("#shippingAddressLine1").count()) {
     // Sandbox-only test address (not a real person's).
     await page.fill("#shippingName", name);
@@ -119,7 +119,8 @@ try {
     const wantItems = plan.length;
     ok = s.status === "complete" && s.mode === "setup" && s.metadata.kind === "preorder" && items.length === wantItems &&
       si?.status === "succeeded" && si?.usage === "off_session" && pm && pm.customer === s.customer?.id && result.customer_details.email === email &&
-      s.metadata.fulfilment === (process.env.SHIP ?? "ship") && si?.metadata?.fulfilment === s.metadata.fulfilment && result.shipping_details_present;
+      s.metadata.fulfilment === (process.env.SHIP ?? "ship") && si?.metadata?.fulfilment === s.metadata.fulfilment &&
+      result.shipping_details_present === ((process.env.SHIP ?? "ship") !== "pickup");
   } else {
     const s = await stripe.checkout.sessions.retrieve(sessionId, { expand: ["line_items.data.price.product", "shipping_cost.shipping_rate"] });
     const ship = s.collected_information?.shipping_details ?? s.shipping_details ?? null;
@@ -136,7 +137,7 @@ try {
     };
     ok = s.status === "complete" && s.payment_status === "paid" && s.metadata.kind === "order" && s.line_items.data.length === plan.length &&
       s.line_items.data.every((li) => li.price.metadata.size && li.price.metadata.design_id && li.price.metadata.garment && li.price.metadata.color && li.price.metadata.drop) &&
-      result.customer_details.email === email && result.customer_details.name === name &&
+      result.customer_details.email === email && (result.customer_details.name === name || !result.customer_details.name) &&
       (!s.shipping_cost || (result.shipping_details_present && s.metadata.fulfilment === result.shipping_rate_fulfilment));
   }
   console.log(JSON.stringify(result, null, 2));

@@ -66,8 +66,10 @@ export async function POST(req: Request) {
     .map((l) => `${l.product.metadata.slug}:${l.price.metadata.size}x${l.quantity}`)
     .join(";")
     .slice(0, 500);
+  // Fewest fields possible: the shipping form already asks for a name, so a separate name field is only
+  // added when there is no address (SF pickup pre-orders: email + name + card).
+  const askName = { name_collection: { individual: { enabled: true, optional: false } } } as const;
   const common = {
-    name_collection: { individual: { enabled: true, optional: false } },
     success_url: `${origin}/success?session_id={CHECKOUT_SESSION_ID}`,
     cancel_url: `${origin}/cancel`,
   } satisfies Partial<Stripe.Checkout.SessionCreateParams>;
@@ -124,21 +126,20 @@ export async function POST(req: Request) {
       const what = lines.map((l) => `${l.quantity} x ${l.product.name} (${l.price.metadata.size})`).join(", ");
       session = await stripe.checkout.sessions.create({
         ...common,
+        ...(fulfilment === "pickup" ? askName : {}),
         mode: "setup",
         currency: config.currency,
         allowed_payment_method_types: ["card"],
         customer_creation: "always",
         metadata,
         setup_intent_data: { metadata, description: `Pre-order: ${what}`.slice(0, 1000) },
-        shipping_address_collection: { allowed_countries: config.shipping.countries as Stripe.Checkout.SessionCreateParams.ShippingAddressCollection.AllowedCountry[] },
+        ...(fulfilment === "pickup"
+          ? {}
+          : { shipping_address_collection: { allowed_countries: config.shipping.countries as Stripe.Checkout.SessionCreateParams.ShippingAddressCollection.AllowedCountry[] } }),
         custom_text: {
-          shipping_address: {
-            message: fulfilment === "pickup"
-              ? "You chose pickup in SF. Stripe still asks for an address; we only use it if we ship."
-              : fulfilment === "ask"
-                ? "We'll email before launch to ask: ship here, or pick up in SF."
-                : "Where we ship it when it launches.",
-          },
+          ...(fulfilment === "pickup"
+            ? {}
+            : { shipping_address: { message: fulfilment === "ask" ? "We'll email before launch to ask: ship here, or pick up in SF." : "Where we ship it when it launches." } }),
           submit: {
             message:
               `${lines.every((l) => l.product.metadata.origin === "agents") ? "Designed by the agents. " : ""}` +
