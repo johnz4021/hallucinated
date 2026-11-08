@@ -37,9 +37,19 @@ export default function Hero({ banners }: { banners: Banner[] }) {
           aria-label={`${n + 1} of ${banners.length}`}
           aria-hidden={n !== i}
         >
-          <div className="hero-img">
-            <Image src={b.image} alt={b.image_alt} fill priority={n === 0} sizes={b.fit === "contain" ? "(max-width: 700px) 100vw, 60vw" : "100vw"} />
-          </div>
+          {b.gallery && b.gallery.length >= 2 ? (
+            <div className={`hero-img hero-tri n${b.gallery.length}`}>
+              {b.gallery.map((g, k) => (
+                <div key={g.url} className="hero-tri-cell">
+                  <Image src={g.url} alt={g.alt} fill priority={n === 0 && k === 0} sizes={`(max-width: 700px) ${k === 0 ? "100vw" : "0px"}, ${Math.round(100 / b.gallery!.length)}vw`} />
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="hero-img">
+              <Image src={b.image} alt={b.image_alt} fill priority={n === 0} sizes={b.fit === "contain" ? "(max-width: 700px) 100vw, 60vw" : "100vw"} />
+            </div>
+          )}
           <div className="hero-copy">
             {b.kicker && <p className="hero-kicker">{b.kicker}</p>}
             <h2 className={`hero-title${b.title.length > 40 ? " long" : ""}`}>

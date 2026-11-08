@@ -34,6 +34,8 @@ export default async function Home() {
       subtitle: p?.status === "preorder" ? "Fresh from the agents. Pre-order now; you're charged only if it launches." : "Fresh from the agents.",
       image: l.images[0].url,
       image_alt: l.images[0].alt,
+      // Launch shots are portrait (2:3); show up to 3 side by side so the hero is filled and the shirt is whole.
+      gallery: l.images.length >= 2 ? l.images.slice(0, 3).map((im) => ({ url: im.url, alt: im.alt })) : undefined,
       cta_label: "Shop the drop",
       cta_href: `/p/${l.slug}`,
       focus: "center",

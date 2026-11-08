@@ -626,3 +626,20 @@ a.hqa-tile:hover .hqa-thumb { outline: 2px solid var(--sand); }
 .hqa-textcard { display: grid; align-content: center; gap: 10px; padding: 12% 10%; width: 100%; height: 100%; color: var(--bone); }
 .hqa-textcard svg { color: var(--sand); }
 .hqa-textcard q { font-weight: 700; font-stretch: 104%; font-size: 1.15em; line-height: 1.25; quotes: "\201C" "\201D"; display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical; overflow: hidden; }
+
+/* Launch triptych: portrait shots side by side fill the hero edge to edge; each crop keeps the shirt in frame. */
+.hero-tri { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0; }
+.hero-tri.n2 { grid-template-columns: repeat(2, 1fr); }
+.hero-tri-cell { position: relative; overflow: hidden; }
+.hero-tri-cell img { object-fit: cover; object-position: 50% 38%; }
+.hero-tri-cell + .hero-tri-cell { border-left: 2px solid var(--forest-deep); }
+@media (max-width: 700px) {
+  .hero-tri { grid-template-columns: 1fr; }
+  .hero-tri-cell + .hero-tri-cell { display: none; }
+  .hero-tri-cell img { object-position: 50% 30%; }
+}
+/* Compact copy over the triptych so the first shot stays visible. */
+.hero-slide:has(.hero-tri) .hero-copy { max-width: min(400px, 30vw); padding: 22px 24px; gap: 10px; bottom: 28px; top: auto; }
+.hero-slide:has(.hero-tri) .hero-title { font-size: clamp(26px, 2.6vw, 40px); }
+.hero-slide:has(.hero-tri) .hero-sub { font-size: 15px; }
+@media (max-width: 700px) { .hero-slide:has(.hero-tri) .hero-copy { max-width: none; } }

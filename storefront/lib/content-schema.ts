@@ -9,6 +9,8 @@ export type Banner = {
   cta_href?: string;
   /** Where the subject sits, so text goes on the other side. */
   focus?: "left" | "right" | "center";
+  /** Site-only (not stored): several portrait shots shown side by side, filling the hero (launches). */
+  gallery?: { url: string; alt: string }[];
   /** Site-only (not stored): show the whole image letterboxed, e.g. an ad with text in it. */
   fit?: "cover" | "contain";
   /** Site-only: small label above the title. */
